@@ -20,6 +20,15 @@ def create_app(client: SubstackPublicClient | None = None) -> FastAPI:
     def _shutdown() -> None:
         substack.close()
 
+    @app.api_route("/", methods=["GET", "POST"])
+    async def root() -> dict:
+        return {
+            "service": "Substack MCP",
+            "status": "ok",
+            "docs": "/docs",
+            "health": "/health",
+        }
+
     @app.get("/health")
     async def healthcheck() -> dict:
         return {
@@ -73,4 +82,3 @@ def create_app(client: SubstackPublicClient | None = None) -> FastAPI:
 
 # Lazily instantiate a default app so `uvicorn substack_mcp.server:app` works.
 app = create_app()
-
