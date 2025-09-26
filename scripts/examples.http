@@ -1,0 +1,11 @@
+### Health check
+GET http://localhost:8000/health
+
+### Recent posts
+GET http://localhost:8000/publications/littlehakr/posts?limit=3
+
+### Fetch a post
+GET http://localhost:8000/posts?url=https://littlehakr.substack.com/p/example-slug
+
+### Crawl + analytics bundle
+GET http://localhost:8000/crawl/littlehakr?post_limit=3&notes_limit=5&analyse=true

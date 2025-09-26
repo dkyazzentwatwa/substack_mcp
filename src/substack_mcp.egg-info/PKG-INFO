@@ -1,0 +1,101 @@
+Metadata-Version: 2.4
+Name: substack-mcp
+Version: 0.1.0
+Summary: Substack scraping and analysis MCP server.
+Author: Cypher
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: httpx>=0.27
+Requires-Dist: beautifulsoup4>=4.12
+Requires-Dist: lxml>=5.2
+Requires-Dist: feedparser>=6.0
+Requires-Dist: fastapi>=0.111
+Requires-Dist: uvicorn[standard]>=0.30
+Requires-Dist: pydantic>=2.8
+Requires-Dist: vaderSentiment>=3.3
+Requires-Dist: python-dateutil>=2.9
+Requires-Dist: cachetools>=5.3
+Provides-Extra: dev
+Requires-Dist: pytest>=8.3; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.23; extra == "dev"
+Requires-Dist: respx>=0.20; extra == "dev"
+
+# Substack MCP (Read-Only)
+
+A Model Context Protocol (MCP) compliant server that scrapes, normalises, and analyses public Substack content.  
+The initial focus is **read-only intelligence** across publications such as
+`https://littlehakr.substack.com`:
+
+- Crawl RSS feeds, post pages, author profiles, and notes without cookies.  
+- Normalise the scraped payloads into typed data models for downstream tools.  
+- Run lightweight analytics (readability, keyword extraction, sentiment, cadence).  
+- Serve everything through an MCP server (FastAPI) with a queue-friendly design.
+
+> ⚠️ Respect Substack's Terms of Service and `robots.txt`. Add throttling when running
+automated crawls.
+
+## Project layout
+
+```
+pyproject.toml
+src/substack_mcp/
+    __init__.py
+    client.py          # HTTP wrapper + content fetchers
+    models.py          # Pydantic schemas for posts, authors, notes, analytics
+    parsers.py         # Feed + HTML parsing utilities
+    analysis.py        # Text analytics helpers
+    cache.py           # Simple time-aware caching layer
+    server.py          # FastAPI MCP server definition
+    settings.py        # Runtime configuration & throttling helpers
+scripts/
+    run_server.py      # Convenience entrypoint for local dev
+```
+
+## Quick start
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+python scripts/run_server.py --publication littlehakr --port 8080
+```
+
+Example MCP calls once the server is running:
+
+- `GET /health` – heartbeat + upstream scrape status.
+- `GET /publications/littlehakr/posts?limit=5` – recent posts from RSS/HTML.
+- `GET /posts?url=https://littlehakr.substack.com/p/example` – full post + analytics.
+- `GET /authors/littlehakr/profile` – author bio + publication stats.
+- `GET /notes/littlehakr` – most recent public notes (best-effort; falls back to RSS if available).
+
+See `scripts/examples.http` for ready-to-run HTTPie recipes.
+
+## Analytics surface area
+
+- Word / sentence / paragraph metrics
+- Flesch Reading Ease + grade level (approximate syllable estimator)
+- Keyword extraction (TF and TF-IDF proxies with stopword filtering)
+- Named entity sniffing via heuristic capitalised phrases (keeps dependencies light)
+- Sentiment using VADER (rule-based, license-friendly)
+- Publishing cadence (rolling average days between posts)
+
+Extend `analysis.py` to plug in heavier ML/NLP models when you are ready.
+
+## Offline development
+
+Network access is restricted in this environment. The code is organised so that:
+
+- Parsers work against stored fixtures (see `tests/fixtures`).
+- HTTP calls pass through an injectable transport. In tests you can use [`respx`](https://lundberg.github.io/respx/)
+  to stub Substack endpoints.
+
+To add a new publication, drop a HAR/HTML sample into `tests/fixtures` and add a parser
+case so regressions surface quickly.
+
+## Roadmap
+
+1. Implement persistent storage (SQLite) for scraped artefacts.
+2. Add background worker (RQ/Celery) for scheduled crawls.
+3. Integrate summarisation + topic modelling.
+4. Support authenticated actions once terms & automation policy are reviewed.
+

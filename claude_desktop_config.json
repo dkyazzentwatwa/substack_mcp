@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "substack-mcp": {
+      "command": "/Users/cypher/Documents/coding/substack_mcp/run_mcp_with_venv.sh",
+      "args": []
+    }
+  }
+}

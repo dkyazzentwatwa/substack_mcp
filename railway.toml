@@ -1,0 +1,12 @@
+[build]
+builder = "NIXPACKS"
+
+env = { PYTHONUNBUFFERED = "1" }
+
+[deploy]
+numReplicas = 1
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+startCommand = "uvicorn substack_mcp.server:app --host 0.0.0.0 --port ${PORT:-8000}"
+healthcheckPath = "/health"
+healthcheckTimeout = 100
