@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import JSONResponse
 from fastapi.concurrency import run_in_threadpool
 
 from . import analysis
@@ -19,6 +20,19 @@ def create_app(client: SubstackPublicClient | None = None) -> FastAPI:
     @app.on_event("shutdown")
     def _shutdown() -> None:
         substack.close()
+
+    payload = {
+        "service": "Substack MCP",
+        "status": "ok",
+        "docs": "/docs",
+        "health": "/health",
+    }
+
+    @app.middleware("http")
+    async def _root_passthrough(request, call_next):  # type: ignore[override]
+        if request.url.path == "/" and request.method in {"GET", "POST", "HEAD", "OPTIONS"}:
+            return JSONResponse(payload)
+        return await call_next(request)
 
     @app.get("/health")
     async def healthcheck() -> dict:
@@ -73,4 +87,3 @@ def create_app(client: SubstackPublicClient | None = None) -> FastAPI:
 
 # Lazily instantiate a default app so `uvicorn substack_mcp.server:app` works.
 app = create_app()
-

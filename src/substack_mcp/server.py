@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import JSONResponse
 
 from . import analysis
 from .client import SubstackPublicClient
@@ -20,14 +19,18 @@ def create_app(client: SubstackPublicClient | None = None) -> FastAPI:
     def _shutdown() -> None:
         substack.close()
 
-    @app.api_route("/", methods=["GET", "POST"])
-    async def root() -> dict:
-        return {
-            "service": "Substack MCP",
-            "status": "ok",
-            "docs": "/docs",
-            "health": "/health",
-        }
+    payload = {
+        "service": "Substack MCP",
+        "status": "ok",
+        "docs": "/docs",
+        "health": "/health",
+    }
+
+    @app.middleware("http")
+    async def _root_passthrough(request, call_next):  # type: ignore[override]
+        if request.url.path == "/" and request.method in {"GET", "POST", "HEAD", "OPTIONS"}:
+            return JSONResponse(payload)
+        return await call_next(request)
 
     @app.get("/health")
     async def healthcheck() -> dict:
