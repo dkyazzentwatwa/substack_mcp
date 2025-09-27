@@ -27,24 +27,10 @@ def create_app(client: SubstackPublicClient | None = None) -> FastAPI:
         "mcp_endpoint": "/mcp"
     }
 
-    @app.middleware("http")
-    async def _root_passthrough(request, call_next):  # type: ignore[override]
-        if request.url.path == "/" and request.method in {"GET", "POST", "HEAD", "OPTIONS"}:
-            # Check if this is an MCP request to root
-            if request.method == "POST":
-                try:
-                    # Try to parse as JSON-RPC
-                    content_type = request.headers.get("content-type", "")
-                    if "application/json" in content_type:
-                        # This looks like an MCP request, let it through to be handled by the root MCP endpoint
-                        pass
-                    else:
-                        return JSONResponse(payload)
-                except:
-                    return JSONResponse(payload)
-            else:
-                return JSONResponse(payload)
-        return await call_next(request)
+    @app.get("/")
+    async def root_info():
+        """Return service information for GET requests to root."""
+        return JSONResponse(payload)
 
     @app.get("/health")
     async def healthcheck() -> dict:
