@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from . import analysis
 from .client import SubstackPublicClient
@@ -79,6 +79,156 @@ def create_app(client: SubstackPublicClient | None = None) -> FastAPI:
         analyse: bool = True,
     ) -> CrawlResult:
         return await run_in_threadpool(substack.crawl_publication, handle, post_limit, analyse, notes_limit)
+
+    # MCP endpoint for ChatGPT custom connectors
+    @app.post("/mcp")
+    @app.get("/mcp")
+    async def mcp_endpoint(request: Request):
+        """Handle MCP requests according to Streamable HTTP transport spec."""
+        accept_header = request.headers.get("accept", "")
+
+        if request.method == "GET":
+            # For GET requests, return SSE stream if requested
+            if "text/event-stream" in accept_header:
+                async def event_stream():
+                    yield "data: {}\n\n"
+
+                return StreamingResponse(
+                    event_stream(),
+                    media_type="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
+                )
+            else:
+                raise HTTPException(status_code=405, detail="Method not allowed")
+
+        elif request.method == "POST":
+            try:
+                # Get JSON-RPC request
+                body = await request.json()
+
+                # Handle basic MCP requests
+                if body.get("method") == "tools/list":
+                    return JSONResponse({
+                        "jsonrpc": "2.0",
+                        "id": body.get("id"),
+                        "result": {
+                            "tools": [
+                                {
+                                    "name": "get_posts",
+                                    "description": "Fetch recent posts from a Substack publication",
+                                    "inputSchema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "handle": {"type": "string", "description": "Substack publication handle"}
+                                        },
+                                        "required": ["handle"]
+                                    }
+                                },
+                                {
+                                    "name": "get_post_content",
+                                    "description": "Get full content of a specific Substack post",
+                                    "inputSchema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "url": {"type": "string", "description": "Full URL to the Substack post"}
+                                        },
+                                        "required": ["url"]
+                                    }
+                                }
+                            ]
+                        }
+                    })
+
+                elif body.get("method") == "tools/call":
+                    params = body.get("params", {})
+                    tool_name = params.get("name")
+                    arguments = params.get("arguments", {})
+
+                    if tool_name == "get_posts":
+                        handle = arguments.get("handle")
+                        if not handle:
+                            return JSONResponse({
+                                "jsonrpc": "2.0",
+                                "id": body.get("id"),
+                                "error": {"code": -32602, "message": "Missing required parameter: handle"}
+                            })
+
+                        posts = await run_in_threadpool(substack.fetch_feed, handle, 10)
+                        result_text = f"Recent posts from {handle}:\n\n"
+                        for post in posts[:5]:
+                            result_text += f"- {post.title}\n  {post.url}\n  Published: {post.published_at}\n\n"
+
+                        return JSONResponse({
+                            "jsonrpc": "2.0",
+                            "id": body.get("id"),
+                            "result": {"content": [{"type": "text", "text": result_text}]}
+                        })
+
+                    elif tool_name == "get_post_content":
+                        url = arguments.get("url")
+                        if not url:
+                            return JSONResponse({
+                                "jsonrpc": "2.0",
+                                "id": body.get("id"),
+                                "error": {"code": -32602, "message": "Missing required parameter: url"}
+                            })
+
+                        try:
+                            post = await run_in_threadpool(substack.fetch_post, url)
+                            result_text = f"Title: {post.summary.title}\n\nContent:\n{post.text[:2000]}..."
+
+                            return JSONResponse({
+                                "jsonrpc": "2.0",
+                                "id": body.get("id"),
+                                "result": {"content": [{"type": "text", "text": result_text}]}
+                            })
+                        except Exception as e:
+                            return JSONResponse({
+                                "jsonrpc": "2.0",
+                                "id": body.get("id"),
+                                "error": {"code": -32603, "message": f"Error fetching post: {str(e)}"}
+                            })
+
+                    else:
+                        return JSONResponse({
+                            "jsonrpc": "2.0",
+                            "id": body.get("id"),
+                            "error": {"code": -32601, "message": f"Unknown tool: {tool_name}"}
+                        })
+
+                elif body.get("method") == "initialize":
+                    return JSONResponse({
+                        "jsonrpc": "2.0",
+                        "id": body.get("id"),
+                        "result": {
+                            "protocolVersion": "2024-11-05",
+                            "capabilities": {"tools": {}},
+                            "serverInfo": {
+                                "name": "substack-mcp",
+                                "version": "0.1.0"
+                            }
+                        }
+                    })
+
+                else:
+                    return JSONResponse({
+                        "jsonrpc": "2.0",
+                        "id": body.get("id"),
+                        "error": {"code": -32601, "message": "Method not found"}
+                    })
+
+            except Exception as e:
+                return JSONResponse({
+                    "jsonrpc": "2.0",
+                    "id": body.get("id") if 'body' in locals() else None,
+                    "error": {"code": -32603, "message": "Internal error"}
+                })
+
+    # Handle favicon requests
+    @app.get("/favicon.ico")
+    async def favicon():
+        """Return empty response for favicon requests."""
+        return Response(status_code=204)
 
     return app
 
