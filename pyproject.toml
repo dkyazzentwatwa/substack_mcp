@@ -21,7 +21,8 @@ dependencies = [
   "pydantic>=2.8",
   "vaderSentiment>=3.3",
   "python-dateutil>=2.9",
-  "cachetools>=5.3"
+  "cachetools>=5.3",
+  "mcp>=1.0.0"
 ]
 
 [project.optional-dependencies]
