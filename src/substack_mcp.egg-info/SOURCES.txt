@@ -6,6 +6,7 @@ src/substack_mcp/__init__.py
 src/substack_mcp/analysis.py
 src/substack_mcp/cache.py
 src/substack_mcp/client.py
+src/substack_mcp/mcp_http_server.py
 src/substack_mcp/mcp_server.py
 src/substack_mcp/models.py
 src/substack_mcp/parsers.py

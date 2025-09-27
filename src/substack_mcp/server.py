@@ -98,6 +98,16 @@ def smart_content_match(query: str, post: PostSummary) -> bool:
     return matching_terms >= max(1, len(query_terms) * 0.5)
 
 
+def get_sentiment_label(compound_score: float) -> str:
+    """Convert compound sentiment score to human-readable label."""
+    if compound_score >= 0.05:
+        return "Positive"
+    elif compound_score <= -0.05:
+        return "Negative"
+    else:
+        return "Neutral"
+
+
 async def smart_content_retrieval(target: str, analysis_type: str, client: SubstackPublicClient) -> str:
     """Intelligent content retrieval that handles various target formats."""
     target_lower = target.lower()
@@ -113,9 +123,9 @@ async def smart_content_retrieval(target: str, analysis_type: str, client: Subst
                        f"📅 Published: {post.summary.published_at}\n" \
                        f"🔗 URL: {post.summary.url}\n\n" \
                        f"📊 **Analytics:**\n" \
-                       f"• Sentiment: {analytics.sentiment.compound:.2f} ({analytics.sentiment_label})\n" \
+                       f"• Sentiment: {analytics.sentiment.compound:.2f} ({get_sentiment_label(analytics.sentiment.compound)})\n" \
                        f"• Readability: {analytics.flesch_reading_ease:.1f} (Flesch)\n" \
-                       f"• Keywords: {', '.join(analytics.keywords[:5])}\n\n" \
+                       f"• Keywords: {', '.join([kw.term for kw in analytics.keywords[:5]])}\n\n" \
                        f"📄 **Content:**\n{post.text}"
             else:
                 return f"📰 **{post.summary.title}**\n\n{post.text[:1000]}..."
