@@ -17,7 +17,6 @@ from mcp.types import (
 )
 from mcp.server.models import InitializationOptions
 from mcp.server import NotificationOptions
-import mcp.server.sse
 
 from .client import SubstackPublicClient
 from . import analysis
