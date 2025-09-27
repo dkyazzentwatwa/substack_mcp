@@ -24,12 +24,26 @@ def create_app(client: SubstackPublicClient | None = None) -> FastAPI:
         "status": "ok",
         "docs": "/docs",
         "health": "/health",
+        "mcp_endpoint": "/mcp"
     }
 
     @app.middleware("http")
     async def _root_passthrough(request, call_next):  # type: ignore[override]
         if request.url.path == "/" and request.method in {"GET", "POST", "HEAD", "OPTIONS"}:
-            return JSONResponse(payload)
+            # Check if this is an MCP request to root
+            if request.method == "POST":
+                try:
+                    # Try to parse as JSON-RPC
+                    content_type = request.headers.get("content-type", "")
+                    if "application/json" in content_type:
+                        # This looks like an MCP request, let it through to be handled by the root MCP endpoint
+                        pass
+                    else:
+                        return JSONResponse(payload)
+                except:
+                    return JSONResponse(payload)
+            else:
+                return JSONResponse(payload)
         return await call_next(request)
 
     @app.get("/health")
@@ -223,6 +237,12 @@ def create_app(client: SubstackPublicClient | None = None) -> FastAPI:
                     "id": body.get("id") if 'body' in locals() else None,
                     "error": {"code": -32603, "message": "Internal error"}
                 })
+
+    # MCP endpoint at root for ChatGPT discovery
+    @app.post("/")
+    async def mcp_root_endpoint(request: Request):
+        """Handle MCP requests at root path for ChatGPT compatibility."""
+        return await mcp_endpoint(request)
 
     # Handle favicon requests
     @app.get("/favicon.ico")
