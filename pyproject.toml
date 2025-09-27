@@ -31,3 +31,9 @@ dev = [
   "pytest-asyncio>=0.23",
   "respx>=0.20"
 ]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"
