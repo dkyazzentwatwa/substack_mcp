@@ -18,8 +18,8 @@ from mcp.types import (
 from mcp.server.models import InitializationOptions
 from mcp.server import NotificationOptions
 
-from .client import SubstackPublicClient
-from . import analysis
+from substack_mcp.client import SubstackPublicClient
+from substack_mcp import analysis
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -479,13 +479,12 @@ async def health_check():
     """Health check endpoint."""
     return {"status": "ok", "service": "Substack MCP Server"}
 
-# Handle favicon requests
-@app.get("/favicon.ico")
-async def favicon():
-    """Return empty response for favicon requests."""
-    return Response(status_code=204)
+# Additional health check endpoints that Railway might try
+@app.get("/healthz")
+async def health_check_z():
+    """Alternative health check endpoint."""
+    return {"status": "ok", "service": "Substack MCP Server"}
 
-# Root endpoint with server info
 @app.get("/")
 async def root():
     """Root endpoint with server information."""
@@ -496,6 +495,13 @@ async def root():
         "health": "/health",
         "status": "ok"
     }
+
+# Handle favicon requests
+@app.get("/favicon.ico")
+async def favicon():
+    """Return empty response for favicon requests."""
+    return Response(status_code=204)
+
 
 
 if __name__ == "__main__":
