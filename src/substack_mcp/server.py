@@ -163,17 +163,16 @@ def create_app(client: SubstackPublicClient | None = None) -> FastAPI:
                                 },
                                 {
                                     "name": "fetch",
-                                    "description": "Fetch content from a specific URL or resource",
+                                    "description": "Fetch content from specific Substack resources by ID or URL",
                                     "inputSchema": {
                                         "type": "object",
                                         "properties": {
-                                            "url": {"type": "string", "description": "URL to fetch content from"},
-                                            "handle": {"type": "string", "description": "Substack publication handle to fetch posts from"}
+                                            "id": {
+                                                "type": "string",
+                                                "description": "Resource identifier in format 'post:URL' or 'publication:handle'"
+                                            }
                                         },
-                                        "anyOf": [
-                                            {"required": ["url"]},
-                                            {"required": ["handle"]}
-                                        ]
+                                        "required": ["id"]
                                     }
                                 }
                             ]
@@ -275,25 +274,37 @@ def create_app(client: SubstackPublicClient | None = None) -> FastAPI:
                             })
 
                     elif tool_name == "fetch":
-                        url = arguments.get("url")
-                        handle = arguments.get("handle")
+                        resource_id = arguments.get("id")
 
-                        if not url and not handle:
+                        if not resource_id:
                             return JSONResponse({
                                 "jsonrpc": "2.0",
                                 "id": body.get("id"),
-                                "error": {"code": -32602, "message": "Either 'url' or 'handle' parameter is required"}
+                                "error": {"code": -32602, "message": "Missing required parameter: id"}
                             })
 
                         try:
-                            if url:
+                            # Parse resource ID format: 'post:URL' or 'publication:handle'
+                            if resource_id.startswith("post:"):
                                 # Fetch specific post content by URL
+                                url = resource_id[5:]  # Remove 'post:' prefix
                                 post = await run_in_threadpool(substack.fetch_post, url)
                                 result_text = f"Title: {post.summary.title}\n\nAuthor: {post.summary.author}\nPublished: {post.summary.published_at}\nURL: {post.summary.url}\n\nContent:\n{post.text}"
-                            elif handle:
+                            elif resource_id.startswith("publication:"):
                                 # Fetch recent posts from publication
+                                handle = resource_id[12:]  # Remove 'publication:' prefix
                                 posts = await run_in_threadpool(substack.fetch_feed, handle, 10)
                                 result_text = f"Recent posts from {handle}:\n\n"
+                                for post in posts:
+                                    result_text += f"- {post.title}\n  {post.subtitle}\n  {post.url}\n  Published: {post.published_at}\n\n"
+                            elif resource_id.startswith("http"):
+                                # Direct URL - treat as post URL
+                                post = await run_in_threadpool(substack.fetch_post, resource_id)
+                                result_text = f"Title: {post.summary.title}\n\nAuthor: {post.summary.author}\nPublished: {post.summary.published_at}\nURL: {post.summary.url}\n\nContent:\n{post.text}"
+                            else:
+                                # Treat as publication handle
+                                posts = await run_in_threadpool(substack.fetch_feed, resource_id, 10)
+                                result_text = f"Recent posts from {resource_id}:\n\n"
                                 for post in posts:
                                     result_text += f"- {post.title}\n  {post.subtitle}\n  {post.url}\n  Published: {post.published_at}\n\n"
 
