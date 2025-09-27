@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""HTTP/SSE MCP Server for Substack integration with ChatGPT."""
+"""HTTP MCP Server for Substack integration with ChatGPT."""
 
 import asyncio
 import json
 import logging
+import os
 from typing import Any, Dict, List
 
+from fastapi import FastAPI, Request, Response, HTTPException
+from fastapi.responses import StreamingResponse, JSONResponse
 from mcp.server import Server
 from mcp.types import (
     Tool,
@@ -27,6 +30,7 @@ logger = logging.getLogger(__name__)
 substack_client = SubstackPublicClient()
 
 server = Server("substack-mcp")
+app = FastAPI(title="Substack MCP Server")
 
 # Workaround for MCP CallToolResult serialization bug
 def create_text_result(text: str, is_error: bool = False):
@@ -389,29 +393,117 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResu
         return create_text_result(json.dumps({"error": str(e)}), is_error=True)
 
 
-async def main():
-    """Main entry point for the HTTP/SSE MCP server."""
-    import os
+# MCP endpoint for ChatGPT
+@app.post("/mcp")
+@app.get("/mcp")
+async def mcp_endpoint(request: Request):
+    """Handle MCP requests according to Streamable HTTP transport spec."""
+    accept_header = request.headers.get("accept", "")
+
+    if request.method == "GET":
+        # For GET requests, return SSE stream if requested
+        if "text/event-stream" in accept_header:
+            async def event_stream():
+                # This is a placeholder - in a full implementation you'd handle
+                # the SSE stream according to the MCP specification
+                yield "data: {}\n\n"
+
+            return StreamingResponse(
+                event_stream(),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
+            )
+        else:
+            raise HTTPException(status_code=405, detail="Method not allowed")
+
+    elif request.method == "POST":
+        try:
+            # Get JSON-RPC request
+            body = await request.json()
+
+            # Handle the MCP request using our existing server logic
+            # This is a simplified version - you'd typically use the full MCP server
+            if body.get("method") == "tools/list":
+                tools = await handle_list_tools()
+                return JSONResponse({
+                    "jsonrpc": "2.0",
+                    "id": body.get("id"),
+                    "result": {"tools": [tool.model_dump() for tool in tools]}
+                })
+
+            elif body.get("method") == "tools/call":
+                params = body.get("params", {})
+                tool_name = params.get("name")
+                arguments = params.get("arguments", {})
+
+                result = await handle_call_tool(tool_name, arguments)
+                return JSONResponse({
+                    "jsonrpc": "2.0",
+                    "id": body.get("id"),
+                    "result": result
+                })
+
+            elif body.get("method") == "initialize":
+                return JSONResponse({
+                    "jsonrpc": "2.0",
+                    "id": body.get("id"),
+                    "result": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {
+                            "tools": {},
+                        },
+                        "serverInfo": {
+                            "name": "substack-mcp",
+                            "version": "0.1.0"
+                        }
+                    }
+                })
+
+            else:
+                return JSONResponse({
+                    "jsonrpc": "2.0",
+                    "id": body.get("id"),
+                    "error": {"code": -32601, "message": "Method not found"}
+                })
+
+        except Exception as e:
+            logger.error(f"Error handling MCP request: {e}")
+            return JSONResponse({
+                "jsonrpc": "2.0",
+                "id": body.get("id") if body else None,
+                "error": {"code": -32603, "message": "Internal error"}
+            })
+
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    return {"status": "ok", "service": "Substack MCP Server"}
+
+# Handle favicon requests
+@app.get("/favicon.ico")
+async def favicon():
+    """Return empty response for favicon requests."""
+    return Response(status_code=204)
+
+# Root endpoint with server info
+@app.get("/")
+async def root():
+    """Root endpoint with server information."""
+    return {
+        "service": "Substack MCP Server",
+        "version": "0.1.0",
+        "mcp_endpoint": "/mcp",
+        "health": "/health",
+        "status": "ok"
+    }
+
+
+if __name__ == "__main__":
+    import uvicorn
 
     # Get port from environment variable or default to 8000
     port = int(os.environ.get("PORT", 8000))
     host = os.environ.get("HOST", "0.0.0.0")
 
-    # Run the server using HTTP/SSE
-    async with mcp.server.sse.sse_server(host, port) as server_context:
-        await server.run(
-            server_context[0],
-            server_context[1],
-            InitializationOptions(
-                server_name="substack-mcp",
-                server_version="0.1.0",
-                capabilities=server.get_capabilities(
-                    notification_options=NotificationOptions(),
-                    experimental_capabilities={}
-                ),
-            ),
-        )
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    uvicorn.run(app, host=host, port=port)

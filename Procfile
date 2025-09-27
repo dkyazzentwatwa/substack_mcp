@@ -1,1 +1,1 @@
-web: python -m substack_mcp.mcp_http_server
+web: uvicorn substack_mcp.mcp_http_server:app --host 0.0.0.0 --port ${PORT:-8000}
