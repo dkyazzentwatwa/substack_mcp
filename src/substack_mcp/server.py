@@ -148,6 +148,18 @@ def create_app(client: SubstackPublicClient | None = None) -> FastAPI:
                                         },
                                         "required": ["url"]
                                     }
+                                },
+                                {
+                                    "name": "search",
+                                    "description": "Search for content across Substack publications",
+                                    "inputSchema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "query": {"type": "string", "description": "Search query to find relevant content"},
+                                            "handle": {"type": "string", "description": "Optional: specific publication handle to search within"}
+                                        },
+                                        "required": ["query"]
+                                    }
                                 }
                             ]
                         }
@@ -201,6 +213,50 @@ def create_app(client: SubstackPublicClient | None = None) -> FastAPI:
                                 "jsonrpc": "2.0",
                                 "id": body.get("id"),
                                 "error": {"code": -32603, "message": f"Error fetching post: {str(e)}"}
+                            })
+
+                    elif tool_name == "search":
+                        query = arguments.get("query")
+                        handle = arguments.get("handle")
+
+                        if not query:
+                            return JSONResponse({
+                                "jsonrpc": "2.0",
+                                "id": body.get("id"),
+                                "error": {"code": -32602, "message": "Missing required parameter: query"}
+                            })
+
+                        try:
+                            # If handle is provided, search within that publication
+                            if handle:
+                                posts = await run_in_threadpool(substack.fetch_feed, handle, 20)
+                                # Filter posts that match the query (simple text search)
+                                matching_posts = [
+                                    post for post in posts
+                                    if query.lower() in post.title.lower() or query.lower() in post.subtitle.lower()
+                                ]
+
+                                result_text = f"Search results for '{query}' in {handle}:\n\n"
+                                if matching_posts:
+                                    for post in matching_posts[:5]:
+                                        result_text += f"- {post.title}\n  {post.subtitle}\n  {post.url}\n  Published: {post.published_at}\n\n"
+                                else:
+                                    result_text += "No matching posts found."
+                            else:
+                                # Generic search - this is a simplified implementation
+                                # In a real implementation, you might search across multiple publications
+                                result_text = f"Search query: '{query}'\n\nTo search within a specific publication, please provide the publication handle. For example, you can search within publications like 'stratechery', 'platformer', or any other Substack handle."
+
+                            return JSONResponse({
+                                "jsonrpc": "2.0",
+                                "id": body.get("id"),
+                                "result": {"content": [{"type": "text", "text": result_text}]}
+                            })
+                        except Exception as e:
+                            return JSONResponse({
+                                "jsonrpc": "2.0",
+                                "id": body.get("id"),
+                                "error": {"code": -32603, "message": f"Error performing search: {str(e)}"}
                             })
 
                     else:
