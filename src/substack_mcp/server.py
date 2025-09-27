@@ -233,13 +233,14 @@ def create_app(client: SubstackPublicClient | None = None) -> FastAPI:
                                 # Filter posts that match the query (simple text search)
                                 matching_posts = [
                                     post for post in posts
-                                    if query.lower() in post.title.lower() or query.lower() in post.subtitle.lower()
+                                    if query.lower() in post.title.lower() or (post.excerpt and query.lower() in post.excerpt.lower())
                                 ]
 
                                 result_text = f"Search results for '{query}' in {handle}:\n\n"
                                 if matching_posts:
                                     for post in matching_posts[:5]:
-                                        result_text += f"- {post.title}\n  {post.subtitle}\n  {post.url}\n  Published: {post.published_at}\n\n"
+                                        excerpt = post.excerpt or "No excerpt available"
+                                        result_text += f"- {post.title}\n  {excerpt}\n  {post.url}\n  Published: {post.published_at}\n\n"
                                 else:
                                     result_text += "No matching posts found."
                             else:
@@ -282,7 +283,8 @@ def create_app(client: SubstackPublicClient | None = None) -> FastAPI:
                                 posts = await run_in_threadpool(substack.fetch_feed, handle, 10)
                                 result_text = f"Recent posts from {handle}:\n\n"
                                 for post in posts:
-                                    result_text += f"- {post.title}\n  {post.subtitle}\n  {post.url}\n  Published: {post.published_at}\n\n"
+                                    excerpt = post.excerpt or "No excerpt available"
+                                    result_text += f"- {post.title}\n  {excerpt}\n  {post.url}\n  Published: {post.published_at}\n\n"
                             elif resource_id.startswith("http"):
                                 # Direct URL - treat as post URL
                                 post = await run_in_threadpool(substack.fetch_post, resource_id)
@@ -292,7 +294,8 @@ def create_app(client: SubstackPublicClient | None = None) -> FastAPI:
                                 posts = await run_in_threadpool(substack.fetch_feed, resource_id, 10)
                                 result_text = f"Recent posts from {resource_id}:\n\n"
                                 for post in posts:
-                                    result_text += f"- {post.title}\n  {post.subtitle}\n  {post.url}\n  Published: {post.published_at}\n\n"
+                                    excerpt = post.excerpt or "No excerpt available"
+                                    result_text += f"- {post.title}\n  {excerpt}\n  {post.url}\n  Published: {post.published_at}\n\n"
 
                             return JSONResponse({
                                 "jsonrpc": "2.0",
