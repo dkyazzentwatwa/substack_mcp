@@ -160,6 +160,21 @@ def create_app(client: SubstackPublicClient | None = None) -> FastAPI:
                                         },
                                         "required": ["query"]
                                     }
+                                },
+                                {
+                                    "name": "fetch",
+                                    "description": "Fetch content from a specific URL or resource",
+                                    "inputSchema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "url": {"type": "string", "description": "URL to fetch content from"},
+                                            "handle": {"type": "string", "description": "Substack publication handle to fetch posts from"}
+                                        },
+                                        "anyOf": [
+                                            {"required": ["url"]},
+                                            {"required": ["handle"]}
+                                        ]
+                                    }
                                 }
                             ]
                         }
@@ -257,6 +272,41 @@ def create_app(client: SubstackPublicClient | None = None) -> FastAPI:
                                 "jsonrpc": "2.0",
                                 "id": body.get("id"),
                                 "error": {"code": -32603, "message": f"Error performing search: {str(e)}"}
+                            })
+
+                    elif tool_name == "fetch":
+                        url = arguments.get("url")
+                        handle = arguments.get("handle")
+
+                        if not url and not handle:
+                            return JSONResponse({
+                                "jsonrpc": "2.0",
+                                "id": body.get("id"),
+                                "error": {"code": -32602, "message": "Either 'url' or 'handle' parameter is required"}
+                            })
+
+                        try:
+                            if url:
+                                # Fetch specific post content by URL
+                                post = await run_in_threadpool(substack.fetch_post, url)
+                                result_text = f"Title: {post.summary.title}\n\nAuthor: {post.summary.author}\nPublished: {post.summary.published_at}\nURL: {post.summary.url}\n\nContent:\n{post.text}"
+                            elif handle:
+                                # Fetch recent posts from publication
+                                posts = await run_in_threadpool(substack.fetch_feed, handle, 10)
+                                result_text = f"Recent posts from {handle}:\n\n"
+                                for post in posts:
+                                    result_text += f"- {post.title}\n  {post.subtitle}\n  {post.url}\n  Published: {post.published_at}\n\n"
+
+                            return JSONResponse({
+                                "jsonrpc": "2.0",
+                                "id": body.get("id"),
+                                "result": {"content": [{"type": "text", "text": result_text}]}
+                            })
+                        except Exception as e:
+                            return JSONResponse({
+                                "jsonrpc": "2.0",
+                                "id": body.get("id"),
+                                "error": {"code": -32603, "message": f"Error fetching content: {str(e)}"}
                             })
 
                     else:
