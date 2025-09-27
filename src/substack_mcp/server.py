@@ -350,6 +350,60 @@ def create_app(client: SubstackPublicClient | None = None) -> FastAPI:
         """Handle MCP requests at root path for ChatGPT compatibility."""
         return await mcp_endpoint(request)
 
+    # ChatGPT search aggregation endpoint
+    @app.post("/search")
+    async def chatgpt_search(request: Request):
+        """Handle ChatGPT's search aggregation requests."""
+        try:
+            body = await request.json()
+
+            # Extract search parameters from ChatGPT's format
+            source_params = body.get("source_specific_search_parameters", {})
+            connector_id = "slurm_mcp_connector_68d74578ccd88191adf2f7eb8c8f7301"
+
+            if connector_id in source_params:
+                params_list = source_params[connector_id]
+                if params_list and len(params_list) > 0:
+                    search_params = params_list[0]
+                    query = search_params.get("query")
+                    handle = search_params.get("handle")
+
+                    if query:
+                        # Use existing search logic
+                        if handle:
+                            posts = await run_in_threadpool(substack.fetch_feed, handle, 20)
+                            matching_posts = [
+                                post for post in posts
+                                if query.lower() in post.title.lower() or (post.excerpt and query.lower() in post.excerpt.lower())
+                            ]
+
+                            results = []
+                            for post in matching_posts[:5]:
+                                excerpt = post.excerpt or "No excerpt available"
+                                results.append({
+                                    "title": post.title,
+                                    "content": excerpt,
+                                    "url": str(post.url),
+                                    "published_at": post.published_at.isoformat() if post.published_at else None,
+                                    "source": handle
+                                })
+                        else:
+                            # Generic search response
+                            results = [{
+                                "title": f"Search Query: {query}",
+                                "content": f"To search within a specific publication, provide the publication handle. Available for search: stratechery, platformer, importai, and other Substack handles.",
+                                "url": "",
+                                "source": "search_guidance"
+                            }]
+
+                        return JSONResponse({"results": results})
+
+            # Default empty response
+            return JSONResponse({"results": []})
+
+        except Exception as e:
+            return JSONResponse({"results": [], "error": str(e)})
+
     # Handle favicon requests
     @app.get("/favicon.ico")
     async def favicon():
