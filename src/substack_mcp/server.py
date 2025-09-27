@@ -400,6 +400,13 @@ def create_app(client: SubstackPublicClient | None = None) -> FastAPI:
     @app.get("/mcp")
     async def mcp_endpoint(request: Request):
         """Handle MCP requests according to Streamable HTTP transport spec."""
+        # Log all requests for debugging
+        print(f"[MCP DEBUG] Method: {request.method}")
+        print(f"[MCP DEBUG] Headers: {dict(request.headers)}")
+        if request.method == "POST":
+            body = await request.json()
+            print(f"[MCP DEBUG] Body: {body}")
+
         accept_header = request.headers.get("accept", "")
 
         if request.method == "GET":
@@ -428,6 +435,38 @@ def create_app(client: SubstackPublicClient | None = None) -> FastAPI:
                         "id": body.get("id"),
                         "result": {
                             "tools": [
+                                {
+                                    "name": "search",
+                                    "description": "Search for content across Substack publications using natural language queries.",
+                                    "inputSchema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "query": {
+                                                "type": "string",
+                                                "description": "Search query - can be topics, keywords, author names, or themes"
+                                            }
+                                        },
+                                        "required": ["query"]
+                                    }
+                                },
+                                {
+                                    "name": "get_posts",
+                                    "description": "Get recent posts from a specific Substack publication.",
+                                    "inputSchema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "handle": {
+                                                "type": "string",
+                                                "description": "Substack publication handle (e.g. 'techtiff', 'stratechery', 'platformer')"
+                                            },
+                                            "limit": {
+                                                "type": "number",
+                                                "description": "Number of posts to retrieve (default: 10, max: 50)"
+                                            }
+                                        },
+                                        "required": ["handle"]
+                                    }
+                                },
                                 {
                                     "name": "search_substack",
                                     "description": "Intelligently search for content across Substack publications. Handles natural language queries and auto-discovers relevant publications.",
@@ -507,8 +546,105 @@ def create_app(client: SubstackPublicClient | None = None) -> FastAPI:
                     tool_name = params.get("name")
                     arguments = params.get("arguments", {})
 
+                    # Simple search for ChatGPT compatibility
+                    if tool_name == "search":
+                        query = arguments.get("query", "")
+
+                        if not query:
+                            return JSONResponse({
+                                "jsonrpc": "2.0",
+                                "id": body.get("id"),
+                                "error": {"code": -32602, "message": "Query is required"}
+                            })
+
+                        try:
+                            # Use existing search logic but simplified
+                            publications = await auto_discover_publications(query)[:3]
+                            if not publications:
+                                publications = ["stratechery", "platformer", "importai"]
+
+                            all_results = []
+                            for handle in publications:
+                                try:
+                                    posts = await run_in_threadpool(substack.fetch_feed, handle, 15)
+                                    matching_posts = [
+                                        post for post in posts
+                                        if smart_content_match(query, post)
+                                    ]
+
+                                    for post in matching_posts[:3]:
+                                        excerpt = post.excerpt or "No preview available"
+                                        all_results.append({
+                                            "title": post.title,
+                                            "excerpt": excerpt[:200] + "..." if len(excerpt) > 200 else excerpt,
+                                            "url": str(post.url),
+                                            "publication": handle,
+                                            "published": post.published_at.strftime("%Y-%m-%d") if post.published_at else "Unknown"
+                                        })
+                                except Exception:
+                                    continue
+
+                            if all_results:
+                                result_text = f"🔍 Found {len(all_results)} results for '{query}':\n\n"
+                                for i, result in enumerate(all_results[:8], 1):
+                                    result_text += f"{i}. **{result['title']}**\n"
+                                    result_text += f"   📖 {result['publication']} • {result['published']}\n"
+                                    result_text += f"   {result['excerpt']}\n"
+                                    result_text += f"   🔗 {result['url']}\n\n"
+                            else:
+                                result_text = f"No results found for '{query}'."
+
+                            return JSONResponse({
+                                "jsonrpc": "2.0",
+                                "id": body.get("id"),
+                                "result": {"content": [{"type": "text", "text": result_text}]}
+                            })
+                        except Exception as e:
+                            return JSONResponse({
+                                "jsonrpc": "2.0",
+                                "id": body.get("id"),
+                                "error": {"code": -32603, "message": f"Search error: {str(e)}"}
+                            })
+
+                    # Get posts from specific publication
+                    elif tool_name == "get_posts":
+                        handle = arguments.get("handle", "")
+                        limit = arguments.get("limit", 10)
+
+                        if not handle:
+                            return JSONResponse({
+                                "jsonrpc": "2.0",
+                                "id": body.get("id"),
+                                "error": {"code": -32602, "message": "Handle is required"}
+                            })
+
+                        try:
+                            posts = await run_in_threadpool(substack.fetch_feed, handle, limit)
+                            if posts:
+                                result_text = f"📚 **Recent posts from {handle}:**\n\n"
+                                for i, post in enumerate(posts, 1):
+                                    excerpt = post.excerpt or "No preview available"
+                                    result_text += f"{i}. **{post.title}**\n"
+                                    result_text += f"   📅 {post.published_at.strftime('%Y-%m-%d') if post.published_at else 'Unknown'}\n"
+                                    result_text += f"   {excerpt[:150]}{'...' if len(excerpt) > 150 else ''}\n"
+                                    result_text += f"   🔗 {post.url}\n\n"
+                            else:
+                                result_text = f"❌ No posts found for publication '{handle}'"
+
+                            return JSONResponse({
+                                "jsonrpc": "2.0",
+                                "id": body.get("id"),
+                                "result": {"content": [{"type": "text", "text": result_text}]}
+                            })
+                        except Exception as e:
+                            return JSONResponse({
+                                "jsonrpc": "2.0",
+                                "id": body.get("id"),
+                                "error": {"code": -32603, "message": f"Error fetching posts: {str(e)}"}
+                            })
+
                     # Smart Substack search - handles natural language queries
-                    if tool_name == "search_substack":
+                    elif tool_name == "search_substack":
                         query = arguments.get("query", "")
                         publication_hint = arguments.get("publication_hint", "")
 
@@ -703,6 +839,7 @@ def create_app(client: SubstackPublicClient | None = None) -> FastAPI:
     @app.post("/")
     async def mcp_root_endpoint(request: Request):
         """Handle MCP requests at root path for ChatGPT compatibility."""
+        print(f"[ROOT DEBUG] ChatGPT calling root endpoint")
         return await mcp_endpoint(request)
 
     # ChatGPT search aggregation endpoint
