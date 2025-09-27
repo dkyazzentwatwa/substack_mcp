@@ -1,31 +1,26 @@
 #!/usr/bin/env python3
-"""MCP Server for Substack integration with Claude Desktop."""
+"""MCP Server for Substack integrations."""
 
 import asyncio
 import json
-from typing import Any, Dict, List, Optional
 import logging
+from typing import Any, Dict, Iterable, List, Optional
+from urllib.parse import parse_qs, urlparse
 
-from mcp.server import Server
-from mcp.types import (
-    Resource,
-    Tool,
-    TextContent,
-    ImageContent,
-    EmbeddedResource,
-    CallToolResult,
-    ListResourcesResult,
-    ListToolsResult,
-    ReadResourceResult,
-)
-from mcp.server.models import InitializationOptions
-from mcp import ServerSession
 import mcp.server.stdio
-import mcp.types as types
-from mcp.server import NotificationOptions
+from mcp.server import NotificationOptions, Server
+from mcp.server.lowlevel.helper_types import ReadResourceContents
+from mcp.server.models import InitializationOptions
+from mcp.types import (
+    CallToolResult,
+    Resource,
+    ResourceTemplate,
+    TextContent,
+    Tool,
+)
 
-from .client import SubstackPublicClient
 from . import analysis
+from .client import SubstackPublicClient
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -36,16 +31,83 @@ substack_client = SubstackPublicClient()
 
 server = Server("substack-mcp")
 
-# Workaround for MCP CallToolResult serialization bug
-def create_text_result(text: str, is_error: bool = False):
-    """Create a properly formatted result that avoids MCP serialization issues"""
-    return {
-        "content": [{
-            "type": "text",
-            "text": text
-        }],
-        "isError": is_error
-    }
+
+def _json_dump(payload: Any) -> str:
+    """Return a stable JSON string for MCP responses."""
+
+    def _to_json_ready(value: Any) -> Any:
+        if hasattr(value, "model_dump"):
+            return value.model_dump(mode="json")  # type: ignore[no-any-return]
+        if isinstance(value, list):
+            return [_to_json_ready(item) for item in value]
+        if isinstance(value, dict):
+            return {key: _to_json_ready(item) for key, item in value.items()}
+        return value
+
+    return json.dumps(_to_json_ready(payload), indent=2, ensure_ascii=False)
+
+
+def _create_text_result(text: str, is_error: bool = False) -> CallToolResult:
+    """Create a CallToolResult containing a single text block."""
+
+    return CallToolResult(
+        content=[TextContent(type="text", text=text)],
+        isError=is_error,
+    )
+
+
+async def _run_io(func, *args):
+    """Execute blocking Substack client calls on a thread pool."""
+
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, func, *args)
+
+
+def _parse_bool(params: Dict[str, List[str]], key: str, default: bool) -> bool:
+    raw = params.get(key, [None])[0]
+    if raw is None:
+        return default
+    return raw.lower() in {"1", "true", "yes", "on"}
+
+
+def _parse_int(params: Dict[str, List[str]], key: str, default: int) -> int:
+    raw = params.get(key, [None])[0]
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError as exc:  # pragma: no cover - defensive
+        raise ValueError(f"Invalid integer for '{key}': {raw}") from exc
+
+
+def _coerce_bool(value: Any, default: bool) -> bool:
+    """Best-effort conversion of tool arguments into booleans."""
+
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
+RESOURCE_HELP = """# Substack MCP Resources
+
+This server exposes a set of read-only resources that map to public Substack data.
+
+## Supported URI templates
+
+- `substack://publication/{handle}/posts{?limit}` – Recent posts for a publication.
+- `substack://publication/{handle}/notes{?limit}` – Recent notes for a publication.
+- `substack://publication/{handle}/profile` – Author/profile information.
+- `substack://publication/{handle}/search{?query,limit}` – Text search across recent posts.
+- `substack://publication/{handle}/crawl{?post_limit,notes_limit,analyze}` – Full crawl with analytics.
+- `substack://post?url={url}` – Fetch a specific post by URL.
+
+All resources return JSON payloads. Use the URI templates above when issuing
+`resources/read` requests from the ChatGPT MCP client.
+"""
 
 
 @server.list_tools()
@@ -170,231 +232,232 @@ async def handle_list_tools() -> List[Tool]:
 @server.call_tool()
 async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
     """Handle tool calls from the client."""
+
     try:
         if name == "get_posts":
             handle = arguments["handle"]
-            limit = arguments.get("limit", 10)
+            limit = int(arguments.get("limit", 10))
+            posts = await _run_io(substack_client.fetch_feed, handle, limit)
+            payload = {"handle": handle, "posts": posts, "limit": limit}
+            return _create_text_result(_json_dump(payload))
 
-            posts = await asyncio.get_event_loop().run_in_executor(
-                None, substack_client.fetch_feed, handle, limit
-            )
-
-            # Convert posts to JSON-serializable format
-            posts_data = [
-                {
-                    "title": post.title,
-                    "url": str(post.url),
-                    "published": post.published_at.isoformat() if post.published_at else None,
-                    "subtitle": post.excerpt,
-                    "author": post.author
-                }
-                for post in posts
-            ]
-
-            return create_text_result(json.dumps(posts_data, indent=2))
-
-        elif name == "get_post_content":
+        if name == "get_post_content":
             url = arguments["url"]
+            post_content = await _run_io(substack_client.fetch_post, url)
+            return _create_text_result(_json_dump(post_content))
 
-            post_content = await asyncio.get_event_loop().run_in_executor(
-                None, substack_client.fetch_post, url
-            )
-
-            post_data = {
-                "title": post_content.summary.title,
-                "url": str(post_content.summary.url),
-                "published": post_content.summary.published_at.isoformat() if post_content.summary.published_at else None,
-                "subtitle": post_content.summary.excerpt,
-                "author": post_content.summary.author,
-                "body": post_content.text,
-                "word_count": post_content.word_count
-            }
-
-            return create_text_result(json.dumps(post_data, indent=2))
-
-        elif name == "analyze_post":
+        if name == "analyze_post":
             url = arguments["url"]
-
-            # Fetch post content first
-            post_content = await asyncio.get_event_loop().run_in_executor(
-                None, substack_client.fetch_post, url
-            )
-
-            # Get feed for context
-            # Extract handle from URL for feed context
-            if "substack.com" in url:
-                parts = url.split(".")
-                if len(parts) > 2:
-                    handle = parts[0].split("//")[-1]
-                    feed = await asyncio.get_event_loop().run_in_executor(
-                        None, substack_client.fetch_feed, handle, 10
-                    )
-                else:
-                    feed = []
+            post_content = await _run_io(substack_client.fetch_post, url)
+            publication_handle: Optional[str] = None
+            summary_publication = post_content.summary.publication
+            if summary_publication and summary_publication.handle:
+                publication_handle = summary_publication.handle
             else:
-                feed = []
+                parsed = urlparse(url)
+                host = parsed.hostname or ""
+                if host.endswith(".substack.com"):
+                    publication_handle = host.split(".")[0]
+            history: List[Any] = []
+            if publication_handle:
+                try:
+                    history = await _run_io(substack_client.fetch_feed, publication_handle, 10)
+                except Exception:  # pragma: no cover - defensive
+                    history = []
+            analytics_result = await _run_io(analysis.analyse_post, post_content, history)
+            return _create_text_result(_json_dump(analytics_result))
 
-            # Analyze the post
-            analytics = await asyncio.get_event_loop().run_in_executor(
-                None, analysis.analyse_post, post_content, feed
-            )
-
-            analytics_data = {
-                "title": analytics.summary.title,
-                "url": str(analytics.summary.url),
-                "published": analytics.summary.published_at.isoformat() if analytics.summary.published_at else None,
-                "sentiment": {
-                    "compound": analytics.sentiment.compound,
-                    "positive": analytics.sentiment.positive,
-                    "neutral": analytics.sentiment.neutral,
-                    "negative": analytics.sentiment.negative
-                } if analytics.sentiment else None,
-                "readability": {
-                    "flesch_reading_ease": analytics.flesch_reading_ease,
-                    "flesch_kincaid_grade": analytics.flesch_kincaid_grade,
-                    "lexical_diversity": analytics.lexical_diversity,
-                    "average_sentence_length": analytics.average_sentence_length
-                },
-                "keywords": [
-                    {"term": kw.term, "score": kw.score}
-                    for kw in analytics.keywords[:10]  # Top 10 keywords
-                ],
-                "publishing_cadence_days": analytics.publishing_cadence_days,
-                "word_count": analytics.extra.get("word_count") if analytics.extra else None
-            }
-
-            return create_text_result(json.dumps(analytics_data, indent=2))
-
-        elif name == "get_author_profile":
+        if name == "get_author_profile":
             handle = arguments["handle"]
-
-            profile = await asyncio.get_event_loop().run_in_executor(
-                None, substack_client.fetch_author_profile, handle
-            )
-
+            profile = await _run_io(substack_client.fetch_author_profile, handle)
             if profile is None:
-                return create_text_result(json.dumps({"error": "Author profile not found"}), is_error=True)
+                return _create_text_result(
+                    _json_dump({"error": "Author profile not found", "handle": handle}),
+                    is_error=True,
+                )
+            return _create_text_result(_json_dump(profile))
 
-            profile_data = {
-                "display_name": profile.display_name,
-                "bio": profile.bio,
-                "avatar_url": str(profile.avatar_url) if profile.avatar_url else None,
-                "location": profile.location,
-                "followers": profile.followers,
-                "publication": {
-                    "handle": profile.publication.handle if profile.publication else None,
-                    "title": profile.publication.title if profile.publication else None,
-                    "url": str(profile.publication.url) if profile.publication and profile.publication.url else None
-                } if profile.publication else None,
-                "social_links": {k: str(v) for k, v in profile.social_links.items()} if profile.social_links else {}
-            }
-
-            return create_text_result(json.dumps(profile_data, indent=2))
-
-        elif name == "get_notes":
+        if name == "get_notes":
             handle = arguments["handle"]
-            limit = arguments.get("limit", 10)
+            limit = int(arguments.get("limit", 10))
+            notes = await _run_io(substack_client.fetch_notes, handle, limit)
+            payload = {"handle": handle, "notes": notes, "limit": limit}
+            return _create_text_result(_json_dump(payload))
 
-            notes = await asyncio.get_event_loop().run_in_executor(
-                None, substack_client.fetch_notes, handle, limit
+        if name == "crawl_publication":
+            handle = arguments["handle"]
+            post_limit = int(arguments.get("post_limit", 5))
+            notes_limit = int(arguments.get("notes_limit", 10))
+            analyze = _coerce_bool(arguments.get("analyze", True), True)
+            result = await _run_io(
+                substack_client.crawl_publication,
+                handle,
+                post_limit,
+                analyze,
+                notes_limit,
             )
+            return _create_text_result(_json_dump(result))
 
-            notes_data = [
-                {
-                    "id": note.id,
-                    "content": note.content,
-                    "published": note.published_at.isoformat() if note.published_at else None,
-                    "author": note.author,
-                    "url": str(note.url)
-                }
-                for note in notes
+        return _create_text_result(_json_dump({"error": f"Unknown tool: {name}"}), is_error=True)
+
+    except Exception as exc:  # noqa: BLE001 - surface failure to the client
+        logger.error("Error handling tool call %s: %s", name, exc)
+        return _create_text_result(_json_dump({"error": str(exc), "tool": name}), is_error=True)
+
+
+@server.list_resources()
+async def handle_list_resources() -> List[Resource]:
+    """Expose the static root resource so clients discover URI templates."""
+
+    return [
+        Resource(
+            name="substack-help",
+            uri="substack://help",
+            description="Documentation for available Substack resource templates.",
+            mimeType="text/markdown",
+        )
+    ]
+
+
+@server.list_resource_templates()
+async def handle_list_resource_templates() -> List[ResourceTemplate]:
+    """Advertise supported resource URI templates."""
+
+    return [
+        ResourceTemplate(
+            name="publication-posts",
+            title="Publication posts",
+            uriTemplate="substack://publication/{handle}/posts{?limit}",
+            description="Fetch the most recent posts for a Substack publication.",
+            mimeType="application/json",
+        ),
+        ResourceTemplate(
+            name="publication-notes",
+            title="Publication notes",
+            uriTemplate="substack://publication/{handle}/notes{?limit}",
+            description="Fetch recent Substack notes for a publication.",
+            mimeType="application/json",
+        ),
+        ResourceTemplate(
+            name="publication-profile",
+            title="Author profile",
+            uriTemplate="substack://publication/{handle}/profile",
+            description="Retrieve author profile metadata for a publication.",
+            mimeType="application/json",
+        ),
+        ResourceTemplate(
+            name="publication-search",
+            title="Search publication",
+            uriTemplate="substack://publication/{handle}/search{?query,limit}",
+            description="Search recent posts for the provided query string.",
+            mimeType="application/json",
+        ),
+        ResourceTemplate(
+            name="publication-crawl",
+            title="Crawl publication",
+            uriTemplate="substack://publication/{handle}/crawl{?post_limit,notes_limit,analyze}",
+            description="Comprehensive crawl including posts, notes, and analytics.",
+            mimeType="application/json",
+        ),
+        ResourceTemplate(
+            name="post-by-url",
+            title="Post by URL",
+            uriTemplate="substack://post{?url}",
+            description="Fetch a specific Substack post by full URL.",
+            mimeType="application/json",
+        ),
+    ]
+
+
+@server.read_resource()
+async def handle_read_resource(uri: str) -> Iterable[ReadResourceContents]:
+    """Resolve Substack resource URIs into JSON payloads."""
+
+    try:
+        if uri in {"substack://help", "substack://index"}:
+            return [ReadResourceContents(content=RESOURCE_HELP, mime_type="text/markdown")]
+
+        parsed = urlparse(uri)
+        if parsed.scheme != "substack":
+            raise ValueError("Unsupported URI scheme; expected 'substack'.")
+
+        netloc = parsed.netloc
+        path_parts = [part for part in parsed.path.split("/") if part]
+        query_params = parse_qs(parsed.query)
+
+        if netloc == "post":
+            post_url = query_params.get("url", [None])[0]
+            if not post_url:
+                raise ValueError("The 'url' query parameter is required for post resources.")
+            post_content = await _run_io(substack_client.fetch_post, post_url)
+            return [
+                ReadResourceContents(
+                    content=_json_dump(post_content),
+                    mime_type="application/json",
+                )
             ]
 
-            return create_text_result(json.dumps(notes_data, indent=2))
+        if netloc != "publication" or not path_parts:
+            raise ValueError(f"Unsupported resource URI: {uri}")
 
-        elif name == "crawl_publication":
-            handle = arguments["handle"]
-            post_limit = arguments.get("post_limit", 5)
-            notes_limit = arguments.get("notes_limit", 10)
-            analyze = arguments.get("analyze", True)
+        handle = path_parts[0]
+        if len(path_parts) == 1 or path_parts[1] == "posts":
+            limit = _parse_int(query_params, "limit", 10)
+            posts = await _run_io(substack_client.fetch_feed, handle, limit)
+            payload = {"handle": handle, "limit": limit, "posts": posts}
+            return [ReadResourceContents(content=_json_dump(payload), mime_type="application/json")]
 
-            result = await asyncio.get_event_loop().run_in_executor(
-                None, substack_client.crawl_publication,
-                handle, post_limit, analyze, notes_limit
+        resource_type = path_parts[1]
+        if resource_type == "notes":
+            limit = _parse_int(query_params, "limit", 10)
+            notes = await _run_io(substack_client.fetch_notes, handle, limit)
+            payload = {"handle": handle, "limit": limit, "notes": notes}
+            return [ReadResourceContents(content=_json_dump(payload), mime_type="application/json")]
+
+        if resource_type == "profile":
+            profile = await _run_io(substack_client.fetch_author_profile, handle)
+            payload = {"handle": handle, "profile": profile}
+            return [ReadResourceContents(content=_json_dump(payload), mime_type="application/json")]
+
+        if resource_type == "search":
+            query = query_params.get("query", [""])[0].strip()
+            if not query:
+                raise ValueError("The 'query' parameter is required for search resources.")
+            limit = max(1, _parse_int(query_params, "limit", 10))
+            search_pool = await _run_io(substack_client.fetch_feed, handle, max(limit, 25))
+            lowered = query.lower()
+            results = []
+            for post in search_pool:
+                matches: List[str] = []
+                if post.title and lowered in post.title.lower():
+                    matches.append("title")
+                if post.excerpt and lowered in post.excerpt.lower():
+                    matches.append("excerpt")
+                if matches:
+                    results.append({"match_fields": matches, "post": post})
+            payload = {"handle": handle, "query": query, "limit": limit, "results": results[:limit]}
+            return [ReadResourceContents(content=_json_dump(payload), mime_type="application/json")]
+
+        if resource_type == "crawl":
+            post_limit = _parse_int(query_params, "post_limit", 5)
+            notes_limit = _parse_int(query_params, "notes_limit", 10)
+            analyze = _parse_bool(query_params, "analyze", True)
+            result = await _run_io(
+                substack_client.crawl_publication,
+                handle,
+                post_limit,
+                analyze,
+                notes_limit,
             )
+            payload = {"handle": handle, "post_limit": post_limit, "notes_limit": notes_limit, "analyze": analyze, "result": result}
+            return [ReadResourceContents(content=_json_dump(payload), mime_type="application/json")]
 
-            result_data = {
-                "handle": result.handle,
-                "author_profile": {
-                    "display_name": result.author_profile.display_name if result.author_profile else None,
-                    "bio": result.author_profile.bio if result.author_profile else None,
-                    "avatar_url": str(result.author_profile.avatar_url) if result.author_profile and result.author_profile.avatar_url else None,
-                    "location": result.author_profile.location if result.author_profile else None,
-                    "followers": result.author_profile.followers if result.author_profile else None,
-                    "publication": {
-                        "handle": result.author_profile.publication.handle if result.author_profile and result.author_profile.publication else None,
-                        "title": result.author_profile.publication.title if result.author_profile and result.author_profile.publication else None,
-                        "url": str(result.author_profile.publication.url) if result.author_profile and result.author_profile.publication and result.author_profile.publication.url else None
-                    } if result.author_profile and result.author_profile.publication else None
-                } if result.author_profile else None,
-                "post_summaries": [
-                    {
-                        "title": post.title,
-                        "url": str(post.url),
-                        "published": post.published_at.isoformat() if post.published_at else None,
-                        "subtitle": post.excerpt,
-                        "author": post.author
-                    }
-                    for post in result.post_summaries
-                ],
-                "analytics": [
-                    {
-                        "title": analytic.summary.title,
-                        "url": str(analytic.summary.url),
-                        "published": analytic.summary.published_at.isoformat() if analytic.summary.published_at else None,
-                        "sentiment": {
-                            "compound": analytic.sentiment.compound,
-                            "positive": analytic.sentiment.positive,
-                            "neutral": analytic.sentiment.neutral,
-                            "negative": analytic.sentiment.negative
-                        } if analytic.sentiment else None,
-                        "readability": {
-                            "flesch_reading_ease": analytic.flesch_reading_ease,
-                            "flesch_kincaid_grade": analytic.flesch_kincaid_grade,
-                            "lexical_diversity": analytic.lexical_diversity,
-                            "average_sentence_length": analytic.average_sentence_length
-                        },
-                        "keywords": [
-                            {"term": kw.term, "score": kw.score}
-                            for kw in analytic.keywords[:10]
-                        ],
-                        "publishing_cadence_days": analytic.publishing_cadence_days,
-                        "word_count": analytic.extra.get("word_count") if analytic.extra else None
-                    }
-                    for analytic in result.analytics
-                ] if result.analytics else [],
-                "notes": [
-                    {
-                        "id": note.id,
-                        "content": note.content,
-                        "published": note.published_at.isoformat() if note.published_at else None,
-                        "author": note.author,
-                        "url": note.url,
-                        "like_count": note.like_count,
-                        "comment_count": note.comment_count
-                    }
-                    for note in result.notes
-                ]
-            }
+        raise ValueError(f"Unsupported resource path: {'/'.join(path_parts)}")
 
-            return create_text_result(json.dumps(result_data, indent=2))
-
-        else:
-            return create_text_result(json.dumps({"error": f"Unknown tool: {name}"}), is_error=True)
-
-    except Exception as e:
-        logger.error(f"Error handling tool call {name}: {e}")
-        return create_text_result(json.dumps({"error": str(e)}), is_error=True)
+    except Exception as exc:  # noqa: BLE001 - keep the connection alive with JSON error payloads
+        logger.error("Error resolving resource %s: %s", uri, exc)
+        error_payload = {"error": str(exc), "uri": uri}
+        return [ReadResourceContents(content=_json_dump(error_payload), mime_type="application/json")]
 
 
 async def main():
