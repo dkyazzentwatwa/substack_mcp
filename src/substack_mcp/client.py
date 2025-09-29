@@ -84,7 +84,9 @@ class SubstackPublicClient:
         try:
             response = self._get(notes_url)
         except httpx.HTTPStatusError as exc:
-            if exc.response.status_code in {401, 403, 404}:
+            # Handle redirects, authorization, and not found errors gracefully
+            if exc.response.status_code in {302, 401, 403, 404}:
+                # Notes endpoint is not accessible (requires auth or changed)
                 return []
             raise
         notes = parsers.parse_notes_html(handle, response.text)
