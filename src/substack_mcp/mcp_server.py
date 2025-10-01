@@ -135,6 +135,30 @@ async def handle_list_tools() -> List[Tool]:
             }
         ),
         Tool(
+            name="search_notes",
+            description="Search Substack notes by content text",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "handle": {
+                        "type": "string",
+                        "description": "Substack publication handle"
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "Search query to match in note content"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results",
+                        "minimum": 1,
+                        "maximum": 50
+                    }
+                },
+                "required": ["handle", "query"]
+            }
+        ),
+        Tool(
             name="crawl_publication",
             description="Comprehensive crawl of a Substack publication including posts, notes, and author profile",
             inputSchema={
@@ -297,6 +321,28 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResu
 
             notes = await asyncio.get_event_loop().run_in_executor(
                 None, substack_client.fetch_notes, handle, limit
+            )
+
+            notes_data = [
+                {
+                    "id": note.id,
+                    "content": note.content,
+                    "published": note.published_at.isoformat() if note.published_at else None,
+                    "author": note.author,
+                    "url": str(note.url)
+                }
+                for note in notes
+            ]
+
+            return create_text_result(json.dumps(notes_data, indent=2))
+
+        elif name == "search_notes":
+            handle = arguments["handle"]
+            query = arguments["query"]
+            limit = arguments.get("limit", 20)
+
+            notes = await asyncio.get_event_loop().run_in_executor(
+                None, substack_client.search_notes, handle, query, limit
             )
 
             notes_data = [

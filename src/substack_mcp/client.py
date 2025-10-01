@@ -80,17 +80,31 @@ class SubstackPublicClient:
 
     @cached
     def fetch_notes(self, handle: str, limit: int | None = 20) -> List[Note]:
-        notes_url = f"https://substack.com/@{handle}/notes"
+        # Use the publication subdomain API endpoint
+        notes_url = f"https://{handle}.substack.com/api/v1/notes?limit={limit or 20}"
         try:
             response = self._get(notes_url)
         except httpx.HTTPStatusError as exc:
             # Handle redirects, authorization, and not found errors gracefully
             if exc.response.status_code in {302, 401, 403, 404}:
-                # Notes endpoint is not accessible (requires auth or changed)
+                # Notes endpoint is not accessible
                 return []
             raise
-        notes = parsers.parse_notes_html(handle, response.text)
+        notes = parsers.parse_notes_json(handle, response.text)
         return notes[:limit] if limit else notes
+
+    def search_notes(self, handle: str, query: str, limit: int | None = 20) -> List[Note]:
+        """Search notes by content text matching."""
+        all_notes = self.fetch_notes(handle, limit=limit or 50)
+        query_lower = query.lower()
+
+        # Filter notes that contain the search query (case-insensitive)
+        matching_notes = [
+            note for note in all_notes
+            if query_lower in note.content.lower()
+        ]
+
+        return matching_notes[:limit] if limit else matching_notes
 
     def crawl_publication(
         self,

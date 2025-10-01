@@ -223,10 +223,54 @@ def parse_notes_html(handle: str, html: str) -> List[Note]:
     return notes
 
 
+def parse_notes_json(handle: str, json_text: str) -> List[Note]:
+    """Parse notes from the /api/v1/notes JSON endpoint."""
+    try:
+        data = json.loads(json_text)
+    except json.JSONDecodeError:
+        return []
+
+    items = data.get("items", [])
+    notes: List[Note] = []
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+
+        # Notes are wrapped in a comment object
+        comment = item.get("comment")
+        if not isinstance(comment, dict):
+            continue
+
+        note_id = str(comment.get("id"))
+        if not note_id:
+            continue
+
+        # Build note URL
+        note_url = f"https://substack.com/@{handle}/note/c-{note_id}"
+
+        # Extract text content from body or body_json
+        content = comment.get("body", "")
+
+        notes.append(
+            Note(
+                id=note_id,
+                url=note_url,
+                author=comment.get("name"),
+                content=content,
+                published_at=_parse_datetime(comment.get("date")),
+                raw=comment,
+            )
+        )
+
+    return notes
+
+
 __all__ = [
     "parse_feed",
     "parse_post_html",
     "parse_author_profile",
     "parse_notes_html",
+    "parse_notes_json",
 ]
 

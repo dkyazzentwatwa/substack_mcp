@@ -179,12 +179,13 @@ Use the `/mcp` command anytime to:
 Output will show:
 ```
 Available MCP servers:
-- substack (6 tools available)
+- substack (7 tools available)
   - get_posts
   - get_post_content
   - analyze_post
   - get_author_profile
   - get_notes
+  - search_notes
   - crawl_publication
 ```
 
@@ -248,6 +249,21 @@ Get recent Substack notes from a publication.
 Parameters:
 - handle (required): Publication handle
 - limit (optional): Number of notes (1-50, default: 10)
+
+Returns:
+- List of notes with content, author, published date, and URL
+```
+
+#### `search_notes`
+Search for notes containing specific text.
+```
+Parameters:
+- handle (required): Publication handle
+- query (required): Search terms to find in notes
+- limit (optional): Max results (1-50, default: 20)
+
+Returns:
+- Filtered list of notes matching the search query
 ```
 
 #### `crawl_publication`
@@ -309,6 +325,14 @@ Returns:
 "Latest posts from platformer"
 "What did techtiff write about this week?"
 "Get notes from this publication"
+```
+
+### Notes Research
+```
+"Show me recent notes from techtiff"
+"Search techtiff's notes for mentions of 'Claude'"
+"Find notes about AI automation from this author"
+"What topics is this writer covering in their notes?"
 ```
 
 ## Analytics Capabilities
