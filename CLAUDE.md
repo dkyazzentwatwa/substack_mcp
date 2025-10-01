@@ -10,22 +10,18 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .[dev]
 
-# Local development servers
-python scripts/run_server.py --port 8080 --publication littlehakr  # FastAPI server
-./run_mcp_with_venv.sh                                             # MCP server for Claude Desktop
-
 # Testing
 pytest                              # Run all tests
 pytest tests/test_analysis.py       # Specific test module
+pytest -v                           # Verbose output
 
-# Deployment
-railway up                          # Deploy to Railway
-railway logs                        # Monitor deployment logs
+# Testing the MCP server
+./run_mcp_with_venv.sh             # Run MCP server for Claude Desktop
 ```
 
 ## Architecture Overview
 
-This is a **Substack MCP (Model Context Protocol) Server** that scrapes public Substack content and provides analytics through both FastAPI REST endpoints and MCP protocol integration.
+This is a **Substack MCP (Model Context Protocol) Server** designed for use with Claude Code. It scrapes public Substack content and provides analytics through the MCP protocol.
 
 ### Core Components
 
@@ -37,45 +33,41 @@ This is a **Substack MCP (Model Context Protocol) Server** that scrapes public S
 
 4. **Analytics Engine** (`analysis.py`) - VADER sentiment analysis, Flesch Reading Ease, keyword extraction (TF-IDF), publishing cadence
 
-5. **Server Implementation** (`server.py`) - FastAPI app with both REST endpoints and MCP JSON-RPC 2.0 protocol
+5. **MCP Server** (`server.py`) - MCP protocol implementation using stdio transport
 
 ### MCP Protocol Integration
 
-The server implements dual endpoints:
-- REST API endpoints (`/publications/{handle}/posts`, `/posts`, `/analytics`, etc.)
-- MCP JSON-RPC endpoint at `/mcp` and `/` (root) for ChatGPT compatibility
+The server implements the MCP protocol for Claude Desktop/Code integration:
 
 **MCP Tools Available:**
 - `get_posts` - Fetch recent posts from a publication
 - `get_post_content` - Full content of specific posts
-- `search` - Search within publications (required for ChatGPT)
+- `get_notes` - Fetch recent notes from a publication
+- `get_author_profile` - Get author and publication information
+- `analyze_post` - Sentiment and readability analysis
+- `crawl_publication` - Comprehensive publication intelligence
+- `search` - Search within publications
 
 **Critical MCP Implementation Details:**
-- Root middleware detects MCP vs HTTP requests by content-type
-- JSON-RPC 2.0 protocol with proper error codes (-32601, -32602, -32603)
-- MCP SDK locked to version 1.10.0 due to CallToolResult serialization bug
-- Custom `create_text_result()` workaround for MCP SDK issues
+- MCP SDK locked to version 1.10.0 due to CallToolResult serialization bug in later versions
+- Custom `create_text_result()` workaround returns plain dictionaries
+- Stdio transport for Claude Desktop integration
+- All tools return structured JSON responses
 
 ### Environment Configuration
 
 ```bash
-# Required for production
-SUBSTACK_MCP_THROTTLE=1.0          # Request throttling seconds
-SUBSTACK_MCP_CACHE_TTL=900         # Cache TTL seconds
+# Optional configuration
+SUBSTACK_MCP_THROTTLE=1.0          # Request throttling seconds (default: 1.0)
+SUBSTACK_MCP_CACHE_TTL=900         # Cache TTL seconds (default: 900)
 SUBSTACK_MCP_WARM_PUBLICATION      # Publication to warm cache on startup
 ```
 
-### Deployment Architecture
+### Package Structure
 
-**Railway Configuration:**
-- `Procfile`: `web: uvicorn substack_mcp.server:app --host 0.0.0.0 --port ${PORT:-8000}`
-- `nixpacks.toml`: Nixpacks build override
-- `runtime.txt`: Python 3.11.9
-- Health check endpoint: `/health`
-
-**Package Structure:**
 - Source code in `src/substack_mcp/` with setuptools configuration in `pyproject.toml`
 - Editable install with `-e .` in `requirements.txt`
+- MCP server wrapper script: `run_mcp_with_venv.sh`
 
 ### Key Implementation Patterns
 
@@ -90,21 +82,156 @@ SUBSTACK_MCP_WARM_PUBLICATION      # Publication to warm cache on startup
 - Public content only, no authentication bypass
 
 **Data Flow:**
-1. MCP request → JSON-RPC parsing → Tool handler
+1. MCP request → Tool handler
 2. Tool handler → SubstackPublicClient → HTTP request (throttled)
 3. HTTP response → Parser → Pydantic model → Analytics (optional)
-4. Result → MCP response format → Client
+4. Result → MCP response format → Claude Desktop/Code
 
 ### Testing Strategy
 
 - Unit tests with `pytest` and `pytest-asyncio`
 - HTTP mocking with `respx` to avoid live network calls
-- Sample fixtures for HTML/RSS content
-- Manual testing recipes in `scripts/examples.http`
+- Sample fixtures for HTML/RSS content in `tests/fixtures/`
+- Test coverage for all MCP tools
 
 ### Known Issues & Workarounds
 
-1. **MCP SDK Bug**: Locked to version 1.10.0 due to CallToolResult serialization issues
+1. **MCP SDK Bug**: Locked to version 1.10.0 due to CallToolResult serialization issues in later versions
 2. **Field Mapping**: Fixed Pydantic field mismatches (`published` → `published_at`)
 3. **JSON Schema**: Removed unsupported `default` properties from MCP tool schemas
-4. **ChatGPT Integration**: Root endpoint (`/`) required for ChatGPT custom connector discovery
+4. **Stdio Transport**: MCP server uses stdio, so manual testing will appear to "hang" waiting for input (this is normal)
+
+## Code Organization
+
+### Client Layer (`client.py`)
+- `SubstackPublicClient` - Main HTTP client
+- Rate limiting: 1 request per second
+- TTL cache: 15 minutes default
+- Methods: `fetch_feed()`, `fetch_post()`, `fetch_author_profile()`, `fetch_notes()`
+
+### Models (`models.py`)
+All Pydantic v2 models with proper validation:
+- `PostSummary` - Basic post metadata
+- `PostContent` - Full post content with body
+- `AuthorProfile` - Author and publication info
+- `Note` - Substack notes
+- `ContentAnalytics` - Sentiment, readability, keywords
+- `PublicationMetadata` - Publication-level data
+- `CrawlResult` - Comprehensive crawl response
+
+### Parsers (`parsers.py`)
+- `parse_feed()` - RSS/Atom feed parsing
+- `extract_post_content()` - HTML content extraction
+- `clean_html_text()` - Text cleanup utilities
+
+### Analysis (`analysis.py`)
+- `analyse_post()` - Main analytics function
+- Sentiment: VADER compound, positive, negative, neutral
+- Readability: Flesch Reading Ease, Kincaid Grade Level
+- Keywords: TF-IDF extraction (top 10)
+- Metrics: Word count, lexical diversity, sentence stats
+
+### MCP Server (`server.py`)
+- All tool implementations return structured JSON
+- Uses `create_text_result()` helper for MCP responses
+- Error handling with proper MCP error types
+- Stdio transport for Claude Desktop integration
+
+## Development Workflow
+
+### Adding New Features
+1. Define data models in `models.py` first
+2. Add client methods in `client.py` if needed
+3. Implement MCP tool in `server.py`
+4. Add tests in `tests/`
+5. Update README.md with new tool documentation
+
+### Testing
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=substack_mcp --cov-report=html
+
+# Test specific module
+pytest tests/test_client.py -v
+
+# Test with network mocking
+pytest tests/test_server.py -v
+```
+
+### Manual MCP Testing
+```bash
+# Start the MCP server
+./run_mcp_with_venv.sh
+
+# Server will wait for stdio input (normal behavior)
+# Test by configuring in Claude Desktop
+```
+
+## Common Tasks
+
+### Add a New MCP Tool
+1. Define tool schema in `server.py` under `@server.list_tools()`
+2. Implement handler under `@server.call_tool()`
+3. Use `create_text_result()` for responses
+4. Add tests in `tests/test_server.py`
+
+### Update Analytics
+1. Modify `analyse_post()` in `analysis.py`
+2. Update `ContentAnalytics` model in `models.py`
+3. Add tests for new metrics
+4. Document in README.md
+
+### Fix MCP Issues
+- Check MCP SDK version is 1.10.0: `pip show mcp`
+- Verify stdio transport is working (not HTTP)
+- Ensure `create_text_result()` returns plain dicts
+- Test with Claude Desktop integration
+
+## Dependencies
+
+**Core:**
+- `mcp==1.10.0` (locked version)
+- `pydantic>=2.0` (data validation)
+- `beautifulsoup4` (HTML parsing)
+- `feedparser` (RSS/Atom feeds)
+- `httpx` (async HTTP client)
+
+**Analytics:**
+- `vaderSentiment` (sentiment analysis)
+- `textstat` (readability metrics)
+- `scikit-learn` (TF-IDF keywords)
+- `nltk` (text processing)
+
+**Development:**
+- `pytest` (testing framework)
+- `pytest-asyncio` (async tests)
+- `respx` (HTTP mocking)
+
+## Important Notes
+
+- This server is designed **exclusively for Claude Code/Desktop** via MCP protocol
+- No web server deployment needed (uses stdio transport)
+- All content access is public only (respects Substack ToS)
+- Rate limiting is built-in and should not be disabled
+- Cache helps reduce API calls and respect rate limits
+
+## Troubleshooting
+
+### MCP Connection Issues
+1. Check `run_mcp_with_venv.sh` is executable: `chmod +x run_mcp_with_venv.sh`
+2. Verify virtual environment exists: `.venv/`
+3. Check MCP config in Claude Desktop: `claude_desktop_config.json`
+4. Restart Claude Desktop after config changes
+
+### Import Errors
+1. Ensure editable install: `pip install -e .`
+2. Check virtual environment is activated
+3. Verify all dependencies installed: `pip list`
+
+### Test Failures
+1. Check network mocking is working (respx)
+2. Verify test fixtures exist in `tests/fixtures/`
+3. Run with verbose output: `pytest -v`
