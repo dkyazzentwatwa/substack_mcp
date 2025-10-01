@@ -5,6 +5,7 @@ Summary: Substack scraping and analysis MCP server.
 Author: Cypher
 Requires-Python: >=3.9
 Description-Content-Type: text/markdown
+License-File: LICENSE
 Requires-Dist: httpx>=0.27
 Requires-Dist: beautifulsoup4>=4.12
 Requires-Dist: lxml>=5.2
@@ -19,271 +20,506 @@ Provides-Extra: dev
 Requires-Dist: pytest>=8.3; extra == "dev"
 Requires-Dist: pytest-asyncio>=0.23; extra == "dev"
 Requires-Dist: respx>=0.20; extra == "dev"
+Dynamic: license-file
 
-# Substack MCP Server - User Guide & Reference
+# Substack MCP Server for Claude Code
 
-A powerful Model Context Protocol (MCP) server that transforms how you research and analyze Substack content. Unlike traditional search engines or AI assistants, this tool provides **deep, structured access** to Substack publications with real-time content analysis.
+A powerful Model Context Protocol (MCP) server that gives Claude Code deep, structured access to Substack publications with real-time content analysis.
 
-## Why Use This Instead of Google Search or Standard AI?
+## Why Use This?
 
-### 🎯 **Precision Over Breadth**
-- **Google/Web Search**: Returns scattered results across the entire web
-- **Standard AI**: Limited to training data cutoffs and general knowledge
-- **Substack MCP**: Provides real-time, comprehensive access to specific Substack publications with structured data
+### 🎯 **Precision Research**
+- Real-time access to specific Substack publications
+- Comprehensive publication intelligence - posts, notes, author profiles
+- Structured data vs. scattered web search results
 
-### 📊 **Rich Analytics Built-In**
-- **Traditional Search**: Just finds content
-- **Substack MCP**: Automatically analyzes sentiment, readability, keywords, publishing patterns, and more
+### 📊 **Built-In Analytics**
+- Sentiment analysis (VADER-based emotional tone detection)
+- Readability metrics (Flesch Reading Ease, Kincaid Grade Level)
+- Keyword extraction (TF-IDF with stopword filtering)
+- Publishing patterns and content trends
 
-### 🔍 **Publication-Focused Research**
-- **Web Search**: Fragmented results from multiple sources
-- **Substack MCP**: Complete publication intelligence - posts, notes, author profiles, analytics, trends
+### ⚡ **Live Data**
+- Fresh content as it's published
+- No AI knowledge cutoff limitations
+- Direct access to RSS feeds and public content
 
-### ⚡ **Real-Time & Comprehensive**
-- **Static AI**: Knowledge cutoff limitations
-- **Substack MCP**: Live data from publications as they publish new content
+> ⚠️ **Ethical Use**: Respects Substack's Terms of Service with built-in throttling (1-second delays) for responsible crawling.
 
-## Core Capabilities
+## TL;DR - Get Started in 30 Seconds
 
-- **Content Intelligence**: Crawl RSS feeds, posts, author profiles, and notes
-- **Advanced Analytics**: Readability scores, sentiment analysis, keyword extraction, publishing cadence
-- **Structured Access**: Normalized data models for downstream analysis
-- **Real-Time Data**: Fresh content as it's published
-- **Publication Insights**: Author analytics, publication trends, content patterns
-
-> ⚠️ **Ethical Use**: Respects Substack's Terms of Service and robots.txt with built-in throttling for responsible crawling.
-
-## 🚀 User Workflows & Use Cases
-
-### **Research Workflows**
-
-#### 📰 **Publication Analysis**
-```
-"Analyze the sentiment trends in Benedict Evans' recent posts about AI"
-→ Fetch posts → Sentiment analysis → Trend identification → Insights
-```
-
-#### 🔍 **Competitive Intelligence**
-```
-"Compare publishing frequency between stratechery and platformer"
-→ Multi-publication crawl → Publishing cadence analysis → Comparative insights
-```
-
-#### 📊 **Content Strategy Research**
-```
-"What topics are trending in fintech Substacks this month?"
-→ Search multiple publications → Keyword extraction → Topic clustering → Trend analysis
-```
-
-#### 🎯 **Deep Dive Analysis**
-```
-"Get full content analysis of latest crypto regulation posts"
-→ Fetch specific posts → Full text analysis → Readability + sentiment → Expert insights
-```
-
-### **ChatGPT Integration Workflows**
-
-#### 🔗 **Custom Connector Setup**
-1. Deploy to Railway (see deployment section)
-2. Add as ChatGPT Custom Connector using your Railway URL
-3. ChatGPT can now access live Substack data in conversations
-
-#### 💬 **Example ChatGPT Prompts**
-- *"Search for recent posts about 'AI regulation' in Benedict Evans' publication"*
-- *"Fetch the latest post from stratechery and analyze its key arguments"*
-- *"Compare the writing style complexity between two different Substack authors"*
-- *"Get publishing patterns and content trends for platformer over the last month"*
-
-### **Developer Integration Workflows**
-
-#### 🛠 **API-First Access**
 ```bash
-# Quick publication overview
-GET /publications/stratechery/posts?limit=10
+# 1. Clone and enter the directory
+git clone https://github.com/yourusername/substack_mcp.git
+cd substack_mcp
 
-# Deep content analysis
-GET /posts?url=https://stratechery.com/specific-post
-GET /analytics?handle=stratechery&limit=5
-
-# Author intelligence
-GET /authors/stratechery/profile
+# 2. Open Claude Code in this directory
+# 3. Ask: "Install this MCP server"
+# 4. Use it: "Get the latest posts from platformer"
 ```
 
-#### 📈 **Custom Analytics Pipeline**
-```python
-# Integrate with your own tools
-client = SubstackPublicClient()
-posts = client.fetch_feed("your-target-publication", 20)
-analytics = [analyse_post(client.fetch_post(p.url)) for p in posts]
-# → Custom visualization, alerts, reporting
-```
+That's it! Claude Code handles everything else.
 
-### **Business Intelligence Workflows**
+## Quick Start with Claude Code
 
-#### 📋 **Content Monitoring**
-- Track competitor publications for strategy insights
-- Monitor industry thought leaders for trend identification
-- Analyze content performance patterns across publications
+### Option 1: Automatic Installation (Recommended)
 
-#### 📊 **Market Research**
-- Publication landscape analysis in specific industries
-- Author influence and reach assessment
-- Content strategy benchmarking
+If you're already in the project directory in Claude Code:
 
-#### 🎯 **Lead Generation & Outreach**
-- Identify high-engagement posts for partnership opportunities
-- Find authors writing about relevant topics in your industry
-- Track publication momentum and growth patterns
+1. **Simply ask Claude Code to set it up:**
+   ```
+   "Install this MCP server for me"
+   ```
 
-## Project layout
+   Claude Code will:
+   - Create the virtual environment
+   - Install dependencies
+   - Configure the MCP server automatically
+   - Add it to your MCP configuration
 
-```
-pyproject.toml
-src/substack_mcp/
-    __init__.py
-    client.py          # HTTP wrapper + content fetchers
-    models.py          # Pydantic schemas for posts, authors, notes, analytics
-    parsers.py         # Feed + HTML parsing utilities
-    analysis.py        # Text analytics helpers
-    cache.py           # Simple time-aware caching layer
-    server.py          # FastAPI MCP server definition
-    settings.py        # Runtime configuration & throttling helpers
-scripts/
-    run_server.py      # Convenience entrypoint for local dev
-```
+2. **Verify it's installed:**
+   ```
+   /mcp
+   ```
 
-## 🏃 Quick Start
+   You should see `substack` (or `substack-mcp`) in the list of available MCP servers.
 
-### **For ChatGPT Users (Recommended)**
-1. Use the deployed version: `https://substackmcp-production.up.railway.app/`
-2. Add as a ChatGPT Custom Connector
-3. Start asking questions like: *"Search for AI posts in Benedict Evans' Substack"*
+3. **Start using it:**
+   ```
+   "Get the latest posts from platformer"
+   "Analyze sentiment for techtiff's recent posts"
+   "Show me publishing patterns for stratechery"
+   ```
 
-### **For Developers**
+### Option 2: Manual Installation
+
 ```bash
+# Clone the repository (if not already)
+git clone https://github.com/yourusername/substack_mcp.git
+cd substack_mcp
+
+# Let Claude Code handle the rest, or manually:
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
-python scripts/run_server.py --publication littlehakr --port 8080
+
+# Then ask Claude Code to:
+# "Add this MCP server to my configuration"
 ```
 
-### **Essential API Endpoints**
+### Using with Claude Desktop (Alternative)
 
-#### 🔍 **Discovery & Search**
+If you want to use with Claude Desktop instead of Claude Code:
+
+**Location:**
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+
+**Configuration:**
+```json
+{
+  "mcpServers": {
+    "substack": {
+      "command": "/absolute/path/to/substack_mcp/run_mcp_with_venv.sh",
+      "args": []
+    }
+  }
+}
+```
+
+Then restart Claude Desktop.
+
+## How to Use with Claude Code
+
+Once installed, simply talk to Claude Code naturally. The MCP tools work automatically in the background.
+
+### Example Conversations
+
+**Research a publication:**
+```
+You: "Analyze the latest 10 posts from stratechery"
+
+Claude Code will:
+- Use get_posts to fetch the posts
+- Use analyze_post on each one
+- Summarize themes, sentiment, and readability patterns
+```
+
+**Compare publications:**
+```
+You: "Compare the writing complexity between platformer and techtiff"
+
+Claude Code will:
+- Fetch posts from both publications
+- Run readability analysis
+- Present comparative insights
+```
+
+**Deep content analysis:**
+```
+You: "Get the full content and sentiment analysis for this post:
+     https://techtiff.substack.com/p/sonnet-4-5-release"
+
+Claude Code will:
+- Use get_post_content to fetch the full article
+- Use analyze_post for sentiment and readability
+- Provide detailed insights
+```
+
+**Track publishing patterns:**
+```
+You: "What's the publishing cadence for littlehakr?"
+
+Claude Code will:
+- Use crawl_publication with analytics
+- Calculate average days between posts
+- Show publishing trends
+```
+
+### Natural Language > Tool Names
+
+You don't need to know the tool names. Just ask naturally:
+
+- ❌ "Use get_posts with handle=platformer and limit=5"
+- ✅ "Show me the latest 5 posts from platformer"
+
+Claude Code automatically:
+- Selects the right MCP tools
+- Extracts parameters from your request
+- Combines multiple tools when needed
+- Presents results in a readable format
+
+### Checking MCP Status
+
+Use the `/mcp` command anytime to:
+- List all installed MCP servers
+- Check if Substack MCP is available
+- See what other MCP tools you have
+
+```
+/mcp
+```
+
+Output will show:
+```
+Available MCP servers:
+- substack (7 tools available)
+  - get_posts
+  - get_post_content
+  - analyze_post
+  - get_author_profile
+  - get_notes
+  - search_notes
+  - crawl_publication
+```
+
+## Available Tools
+
+### 🔍 **Content Discovery**
+
+#### `get_posts`
+Fetch recent posts from a Substack publication.
+```
+Parameters:
+- handle (required): Publication handle (e.g., 'platformer')
+- limit (optional): Number of posts (1-50, default: 10)
+```
+
+#### `get_post_content`
+Get full content of a specific Substack post.
+```
+Parameters:
+- url (required): Full URL to the Substack post
+```
+
+#### `search`
+Search for content across publications.
+```
+Parameters:
+- query (required): Search terms
+- handle (optional): Specific publication to search
+```
+
+### 📊 **Analytics & Intelligence**
+
+#### `analyze_post`
+Analyze sentiment and readability of a post.
+```
+Parameters:
+- url (required): Full URL to the Substack post
+
+Returns:
+- Sentiment scores (positive, negative, neutral, compound)
+- Readability metrics (Flesch Reading Ease, grade level)
+- Keyword extraction
+- Word count and structure analysis
+```
+
+#### `get_author_profile`
+Get author and publication information.
+```
+Parameters:
+- handle (required): Substack publication handle
+
+Returns:
+- Author bio and profile
+- Publication metadata
+- Social links
+```
+
+#### `get_notes`
+Get recent Substack notes from a publication.
+```
+Parameters:
+- handle (required): Publication handle
+- limit (optional): Number of notes (1-50, default: 10)
+
+Returns:
+- List of notes with content, author, published date, and URL
+```
+
+#### `search_notes`
+Search for notes containing specific text.
+```
+Parameters:
+- handle (required): Publication handle
+- query (required): Search terms to find in notes
+- limit (optional): Max results (1-50, default: 20)
+
+Returns:
+- Filtered list of notes matching the search query
+```
+
+#### `crawl_publication`
+Comprehensive publication crawl with analytics.
+```
+Parameters:
+- handle (required): Publication handle
+- post_limit (optional): Max posts (1-25, default: 5)
+- notes_limit (optional): Max notes (0-50, default: 10)
+- analyze (optional): Perform analytics (default: true)
+
+Returns:
+- Complete publication overview
+- Author profile
+- Recent posts with analytics
+- Recent notes
+- Publishing patterns
+```
+
+## Common Use Cases
+
+### Content Strategy Research
+```
+"What topics is stratechery covering this month?"
+"How often does platformer publish?"
+"Compare the keyword focus between two tech newsletters"
+```
+
+### Writing Analysis
+```
+"Is techtiff's content getting easier or harder to read over time?"
+"What's the average grade level for this publication?"
+"Show me sentiment trends in recent posts"
+```
+
+### Competitive Intelligence
+```
+"Compare publishing frequency across 3 tech newsletters"
+"Which newsletter has the most positive sentiment?"
+"Identify content gaps between competing publications"
+```
+
+### Author Research
+```
+"Give me a profile of the stratechery author"
+"What's their publishing pattern?"
+"Show me their most recent posts with analytics"
+```
+
+### Deep Content Dives
+```
+"Analyze this specific post for readability and sentiment: [URL]"
+"Extract key themes from the last 20 posts"
+"Show me how their writing style has evolved"
+```
+
+### Quick Checks
+```
+"Latest posts from platformer"
+"What did techtiff write about this week?"
+"Get notes from this publication"
+```
+
+### Notes Research
+```
+"Show me recent notes from techtiff"
+"Search techtiff's notes for mentions of 'Claude'"
+"Find notes about AI automation from this author"
+"What topics is this writer covering in their notes?"
+```
+
+## Analytics Capabilities
+
+### Content Metrics
+- **Sentiment Analysis**: Positive, negative, neutral, and compound scores
+- **Readability**: Flesch Reading Ease (0-100 scale)
+- **Grade Level**: Flesch-Kincaid Grade Level
+- **Lexical Diversity**: Vocabulary richness metrics
+- **Structure**: Word count, sentence count, average sentence length
+
+### Publication Intelligence
+- **Publishing Cadence**: Average days between posts
+- **Content Trends**: Topic evolution over time
+- **Keyword Analysis**: TF-IDF-based keyword extraction
+- **Author Patterns**: Writing style consistency
+
+## Project Structure
+
+```
+substack_mcp/
+├── src/substack_mcp/
+│   ├── client.py       # HTTP client with rate limiting
+│   ├── models.py       # Pydantic data models
+│   ├── parsers.py      # RSS/HTML parsing
+│   ├── analysis.py     # Text analytics
+│   ├── cache.py        # TTL-based caching
+│   ├── server.py       # MCP server implementation
+│   └── settings.py     # Configuration
+├── tests/              # Test suite
+├── scripts/            # Utility scripts
+└── run_mcp_with_venv.sh # Wrapper script
+```
+
+## Configuration
+
+Optional environment variables:
+
 ```bash
-# Health check and server status
-GET /health
+# Request throttling (seconds between requests)
+export SUBSTACK_MCP_THROTTLE=1.0
 
-# Search within a publication
-GET /search?query=AI&handle=stratechery
+# Cache time-to-live (seconds)
+export SUBSTACK_MCP_CACHE_TTL=900
 
-# Fetch recent posts
-GET /publications/stratechery/posts?limit=10
-
-# Fetch specific post content
-GET /posts?url=https://stratechery.com/2024/example-post
+# Publication to warm cache on startup
+export SUBSTACK_MCP_WARM_PUBLICATION=platformer
 ```
 
-#### 📊 **Analytics & Intelligence**
+## Troubleshooting
+
+### MCP Server Not Showing Up
+
+**Check with `/mcp` command:**
+```
+/mcp
+```
+
+If you don't see `substack` in the list:
+
+1. **Ask Claude Code to help:**
+   ```
+   "The substack MCP server isn't showing up in /mcp. Can you help install it?"
+   ```
+
+2. **Verify installation:**
+   ```bash
+   cd /path/to/substack_mcp
+   ls run_mcp_with_venv.sh  # Should exist
+   source .venv/bin/activate
+   pip list | grep mcp       # Should show mcp==1.10.0
+   ```
+
+3. **Check Python version:**
+   ```bash
+   python3 --version  # Should be 3.10 or higher
+   ```
+
+### Tools Not Working
+
+If Claude Code says tools aren't available:
+
+1. **Reinstall dependencies:**
+   ```
+   "Can you reinstall the dependencies for this MCP server?"
+   ```
+
+2. **Check for errors:**
+   ```bash
+   ./run_mcp_with_venv.sh
+   # Should start without errors (Ctrl+C to exit)
+   ```
+
+### Claude Desktop Not Connecting
+
+If using Claude Desktop instead of Claude Code:
+
+1. Ensure `claude_desktop_config.json` has correct absolute path
+2. Make wrapper script executable: `chmod +x run_mcp_with_venv.sh`
+3. Restart Claude Desktop after config changes
+
+### Rate Limiting Issues
+
+If you see HTTP 429 errors or timeouts:
+- The server has built-in 1-second throttling
+- Reduce the number of posts you're analyzing at once
+- Try again after a brief pause
+
+## Technical Notes
+
+### MCP SDK Version
+This server uses MCP SDK v1.10.0 (locked) with a workaround for a CallToolResult serialization bug in later versions. The implementation uses custom `create_text_result()` functions that return plain dictionaries.
+
+### Rate Limiting
+Built-in 1-second throttle between requests to respect Substack's infrastructure. Uses TTL-based in-memory cache (15 minutes default).
+
+### Public Content Only
+This tool accesses only public Substack content. No authentication or paywalled content access.
+
+## Getting Help
+
+### Using Claude Code
+The best way to get help is to ask Claude Code directly:
+```
+"I'm having trouble with the substack MCP server. Can you help diagnose?"
+"How do I use this MCP server to analyze multiple publications?"
+```
+
+### Documentation
+- **[CLAUDE.md](CLAUDE.md)** - Developer documentation for working on this project
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Contribution guidelines
+- **GitHub Issues** - Report bugs or request features
+
+### Quick Checks
 ```bash
-# Content analytics with sentiment, readability, keywords
-GET /analytics?handle=stratechery&limit=5
+# Verify installation
+/mcp
 
-# Author profile and publication stats
-GET /authors/stratechery/profile
+# Test manually
+cd substack_mcp && ./run_mcp_with_venv.sh
 
-# Recent notes and commentary
-GET /notes/stratechery?limit=10
-
-# Comprehensive publication crawl
-GET /crawl/stratechery?post_limit=10&analyse=true
+# Check Python and dependencies
+python3 --version
+source .venv/bin/activate && pip list
 ```
 
-#### 🎯 **MCP Tools (for ChatGPT/Claude)**
-- **search**: Find content across publications
-- **fetch**: Get specific posts or publication feeds
-- **get_posts**: Recent posts from a publication
-- **get_post_content**: Full post analysis
+## Contributing
 
-### **Example Use Cases**
+Contributions welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-```bash
-# Competitive analysis
-curl "https://your-server.com/analytics?handle=platformer&limit=10"
+## License
 
-# Content research
-curl "https://your-server.com/search?query=crypto%20regulation&handle=stratechery"
-
-# Author intelligence
-curl "https://your-server.com/authors/benthompson/profile"
-
-# Publication monitoring
-curl "https://your-server.com/crawl/newsletter?post_limit=5&analyse=true"
-```
-
-See `scripts/examples.http` for ready-to-run HTTPie recipes and advanced examples.
-
-## 🧠 Advanced Analytics Capabilities
-
-### **Content Analysis**
-- **Readability Metrics**: Flesch Reading Ease + Kincaid Grade Level
-- **Sentiment Analysis**: VADER-based emotional tone detection (positive, negative, neutral, compound scores)
-- **Keyword Intelligence**: TF-IDF extraction with stopword filtering
-- **Structure Analysis**: Word/sentence/paragraph metrics and lexical diversity
-- **Entity Detection**: Heuristic capitalized phrase identification
-
-### **Publication Intelligence**
-- **Publishing Cadence**: Rolling average days between posts
-- **Content Trends**: Topic evolution and keyword trending over time
-- **Author Patterns**: Writing style consistency and evolution
-- **Engagement Signals**: Post length vs. publication frequency analysis
-
-### **Competitive Advantages Over Traditional Tools**
-
-| Feature | Google Search | Standard AI | Substack MCP |
-|---------|---------------|-------------|--------------|
-| **Real-time Data** | ❌ SEO-dependent | ❌ Training cutoff | ✅ Live content |
-| **Publication Focus** | ❌ Scattered results | ❌ General knowledge | ✅ Deep publication intelligence |
-| **Content Analytics** | ❌ Basic snippets | ❌ No analysis tools | ✅ Built-in sentiment, readability, keywords |
-| **Structured Access** | ❌ Unstructured HTML | ❌ Text responses only | ✅ JSON APIs + MCP protocol |
-| **Author Intelligence** | ❌ Limited bio info | ❌ Static profiles | ✅ Dynamic author analytics |
-| **Trend Analysis** | ❌ Manual aggregation | ❌ No trend tools | ✅ Publishing patterns & content evolution |
-| **API Integration** | ❌ Limited APIs | ❌ Chat-only | ✅ Full REST + MCP + ChatGPT Custom Connectors |
-
-**Extend `analysis.py` to plug in heavier ML/NLP models when you are ready.**
-
-## Railway deployment
-
-This repository includes everything needed to deploy the FastAPI server on [Railway](https://railway.app/):
-
-- `Procfile` starts `uvicorn` with the correct host/port bindings for Railway's runtime.
-- `runtime.txt` pins Python 3.11 for consistent builds.
-- `railway.toml` defines a single web process, healthcheck at `/health`, and restarts on failure.
-- `requirements.txt` delegates dependency installation to `pip install -e .` so project metadata stays in sync.
-
-To launch a new service:
-
-1. Install the Railway CLI and authenticate: `npm i -g @railway/cli && railway login`.
-2. Run `railway up` from the repository root; Railway detects the Python service and builds it via Nixpacks.
-3. After the first deploy, set any optional env vars (for example `SUBSTACK_MCP_THROTTLE`, `SUBSTACK_MCP_CACHE_TTL`, or `SUBSTACK_MCP_WARM_PUBLICATION`) in the Railway dashboard.
-4. Visit the generated URL and hit `/health` to confirm the server is running; other endpoints behave the same as the local quick-start commands above.
-
-The `scripts/run_server.py` entrypoint now respects `HOST`, `PORT`, and `LOG_LEVEL` env vars, matching Railway's runtime defaults.
-
-## Offline development
-
-Network access is restricted in this environment. The code is organised so that:
-
-- Parsers work against stored fixtures (see `tests/fixtures`).
-- HTTP calls pass through an injectable transport. In tests you can use [`respx`](https://lundberg.github.io/respx/)
-  to stub Substack endpoints.
-
-To add a new publication, drop a HAR/HTML sample into `tests/fixtures` and add a parser
-case so regressions surface quickly.
+MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Roadmap
 
-1. Implement persistent storage (SQLite) for scraped artefacts.
-2. Add background worker (RQ/Celery) for scheduled crawls.
-3. Integrate summarisation + topic modelling.
-4. Support authenticated actions once terms & automation policy are reviewed.
+- [ ] Persistent storage (SQLite) for cached content
+- [ ] Background worker for scheduled crawls
+- [ ] Advanced summarization and topic modeling
+- [ ] Support for authenticated content (pending ToS review)
+
+---
+
+**Built for [Claude Code](https://claude.com/claude-code)** - The official Anthropic CLI for Claude.
+
+Made with ❤️ for Substack researchers, content strategists, and AI enthusiasts.

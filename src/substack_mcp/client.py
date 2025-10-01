@@ -36,7 +36,7 @@ class SubstackPublicClient:
             connect=self.settings.connect_timeout,
             read=self.settings.read_timeout,
         )
-        self._client = client or httpx.Client(headers=headers, timeout=timeout)
+        self._client = client or httpx.Client(headers=headers, timeout=timeout, follow_redirects=True)
         self._last_request_ts = 0.0
 
     def close(self) -> None:
@@ -51,7 +51,7 @@ class SubstackPublicClient:
 
     def _get(self, url: str) -> httpx.Response:
         self._throttle()
-        response = self._client.get(url)
+        response = self._client.get(url, follow_redirects=True)
         response.raise_for_status()
         return response
 
@@ -86,7 +86,7 @@ class SubstackPublicClient:
             response = self._get(notes_url)
         except httpx.HTTPStatusError as exc:
             # Handle redirects, authorization, and not found errors gracefully
-            if exc.response.status_code in {302, 401, 403, 404}:
+            if exc.response.status_code in {301, 302, 401, 403, 404}:
                 # Notes endpoint is not accessible
                 return []
             raise
