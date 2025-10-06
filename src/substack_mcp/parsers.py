@@ -217,6 +217,9 @@ def parse_notes_html(handle: str, html: str) -> List[Note]:
                 author=item.get("user", {}).get("name") if isinstance(item.get("user"), dict) else None,
                 content=item.get("body") or item.get("body_html") or "",
                 published_at=_parse_datetime(item.get("published_at") or item.get("created_at")),
+                reaction_count=item.get("reaction_count", 0),
+                restacks=item.get("restacks", 0),
+                children_count=item.get("children_count", 0),
                 raw=item,
             )
         )
@@ -259,6 +262,9 @@ def parse_notes_json(handle: str, json_text: str) -> List[Note]:
                 author=comment.get("name"),
                 content=content,
                 published_at=_parse_datetime(comment.get("date")),
+                reaction_count=comment.get("reaction_count", 0),
+                restacks=comment.get("restacks", 0),
+                children_count=comment.get("children_count", 0),
                 raw=comment,
             )
         )

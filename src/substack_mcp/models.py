@@ -76,6 +76,9 @@ class Note(BaseModel):
     author: Optional[str] = None
     content: str
     published_at: Optional[datetime] = None
+    reaction_count: int = Field(0, description="Total number of reactions (likes).")
+    restacks: int = Field(0, description="Number of times the note was restacked.")
+    children_count: int = Field(0, description="Number of comments/replies to this note.")
     raw: Dict[str, Any] = Field(default_factory=dict)
 
 

@@ -329,7 +329,10 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResu
                     "content": note.content,
                     "published": note.published_at.isoformat() if note.published_at else None,
                     "author": note.author,
-                    "url": str(note.url)
+                    "url": str(note.url),
+                    "reaction_count": note.reaction_count,
+                    "restacks": note.restacks,
+                    "children_count": note.children_count
                 }
                 for note in notes
             ]
@@ -351,7 +354,10 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResu
                     "content": note.content,
                     "published": note.published_at.isoformat() if note.published_at else None,
                     "author": note.author,
-                    "url": str(note.url)
+                    "url": str(note.url),
+                    "reaction_count": note.reaction_count,
+                    "restacks": note.restacks,
+                    "children_count": note.children_count
                 }
                 for note in notes
             ]
@@ -425,9 +431,10 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResu
                         "content": note.content,
                         "published": note.published_at.isoformat() if note.published_at else None,
                         "author": note.author,
-                        "url": note.url,
-                        "like_count": note.like_count,
-                        "comment_count": note.comment_count
+                        "url": str(note.url),
+                        "reaction_count": note.reaction_count,
+                        "restacks": note.restacks,
+                        "children_count": note.children_count
                     }
                     for note in result.notes
                 ]
