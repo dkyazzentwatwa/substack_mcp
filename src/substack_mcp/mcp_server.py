@@ -135,6 +135,32 @@ async def handle_list_tools() -> List[Tool]:
             }
         ),
         Tool(
+            name="get_all_posts",
+            description="Get ALL posts from a publication's archive (not limited to recent 20). Supports date filtering to fetch posts from specific time periods.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "handle": {
+                        "type": "string",
+                        "description": "Substack publication handle (e.g. 'techtiff', 'stratechery', 'platformer')"
+                    },
+                    "before_date": {
+                        "type": "string",
+                        "description": "ISO date string (e.g. '2025-08-20') - only return posts published BEFORE this date"
+                    },
+                    "after_date": {
+                        "type": "string",
+                        "description": "ISO date string (e.g. '2025-01-01') - only return posts published AFTER this date"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of posts to return (no limit if not specified)"
+                    }
+                },
+                "required": ["handle"]
+            }
+        ),
+        Tool(
             name="search_notes",
             description="Search Substack notes by content text",
             inputSchema={
@@ -338,6 +364,30 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResu
             ]
 
             return create_text_result(json.dumps(notes_data, indent=2))
+
+        elif name == "get_all_posts":
+            handle = arguments["handle"]
+            before_date = arguments.get("before_date")
+            after_date = arguments.get("after_date")
+            limit = arguments.get("limit")
+
+            posts = await asyncio.get_event_loop().run_in_executor(
+                None, substack_client.fetch_archive, handle, before_date, after_date, limit
+            )
+
+            # Convert posts to JSON-serializable format
+            posts_data = [
+                {
+                    "title": post.title,
+                    "url": str(post.url),
+                    "published": post.published_at.isoformat() if post.published_at else None,
+                    "subtitle": post.excerpt,
+                    "author": post.author
+                }
+                for post in posts
+            ]
+
+            return create_text_result(json.dumps(posts_data, indent=2))
 
         elif name == "search_notes":
             handle = arguments["handle"]

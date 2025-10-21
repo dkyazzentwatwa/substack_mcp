@@ -272,11 +272,83 @@ def parse_notes_json(handle: str, json_text: str) -> List[Note]:
     return notes
 
 
+def parse_archive_json(
+    handle: str,
+    json_data: List[Dict],
+    before_date: Optional[datetime] = None,
+    after_date: Optional[datetime] = None,
+    limit: Optional[int] = None,
+) -> List[PostSummary]:
+    """Parse archive API JSON response to extract posts with optional date filtering.
+
+    Args:
+        handle: Publication handle
+        json_data: List of post dictionaries from archive API
+        before_date: Only include posts published before this date
+        after_date: Only include posts published after this date
+        limit: Maximum number of posts to return
+
+    Returns:
+        List of PostSummary objects
+    """
+    from datetime import timezone
+
+    publication = _guess_publication(handle)
+    results: List[PostSummary] = []
+
+    for post_item in json_data:
+        if not isinstance(post_item, dict):
+            continue
+
+        # Parse publish date
+        published_at = _parse_datetime(post_item.get("post_date"))
+
+        # Apply date filtering - make timezone-naive dates aware for comparison
+        if before_date and published_at:
+            before_cmp = before_date if before_date.tzinfo else before_date.replace(tzinfo=timezone.utc)
+            if published_at >= before_cmp:
+                continue
+        if after_date and published_at:
+            after_cmp = after_date if after_date.tzinfo else after_date.replace(tzinfo=timezone.utc)
+            if published_at < after_cmp:
+                continue
+
+        # Extract post data
+        post_url = post_item.get("canonical_url")
+        if not post_url and post_item.get("slug"):
+            post_url = f"https://{handle}.substack.com/p/{post_item['slug']}"
+
+        # Extract tags from postTags array
+        tags = []
+        if isinstance(post_item.get("postTags"), list):
+            tags = [tag.get("name") for tag in post_item["postTags"] if isinstance(tag, dict) and tag.get("name")]
+
+        summary = PostSummary(
+            id=str(post_item.get("id")) if post_item.get("id") else None,
+            title=post_item.get("title", "Untitled"),
+            url=post_url,
+            published_at=published_at,
+            updated_at=None,  # Not provided in archive API response
+            author=None,  # Not provided in archive API response
+            excerpt=post_item.get("subtitle") or post_item.get("description") or post_item.get("truncated_body_text"),
+            tags=tags,
+            publication=publication,
+        )
+
+        results.append(summary)
+
+        if limit and len(results) >= limit:
+            break
+
+    return results
+
+
 __all__ = [
     "parse_feed",
     "parse_post_html",
     "parse_author_profile",
     "parse_notes_html",
     "parse_notes_json",
+    "parse_archive_json",
 ]
 

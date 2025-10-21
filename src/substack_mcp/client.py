@@ -106,6 +106,105 @@ class SubstackPublicClient:
 
         return matching_notes[:limit] if limit else matching_notes
 
+    @cached
+    def fetch_archive(
+        self,
+        handle: str,
+        before_date: Optional[str] = None,
+        after_date: Optional[str] = None,
+        limit: int | None = None,
+    ) -> List[PostSummary]:
+        """Fetch all posts from publication archive with optional date filtering.
+
+        Uses Substack's archive API with pagination to fetch all posts.
+
+        Args:
+            handle: Substack publication handle
+            before_date: ISO date string (e.g., "2025-08-20") - only posts before this date
+            after_date: ISO date string (e.g., "2025-01-01") - only posts after this date
+            limit: Maximum number of posts to return
+
+        Returns:
+            List of PostSummary objects from the archive
+        """
+        import json
+        from datetime import datetime
+
+        # Parse date strings to datetime objects
+        before_dt = None
+        after_dt = None
+
+        if before_date:
+            try:
+                before_dt = datetime.fromisoformat(before_date.replace('Z', '+00:00'))
+            except (ValueError, AttributeError):
+                pass  # Invalid date format, ignore
+
+        if after_date:
+            try:
+                after_dt = datetime.fromisoformat(after_date.replace('Z', '+00:00'))
+            except (ValueError, AttributeError):
+                pass  # Invalid date format, ignore
+
+        # Fetch posts using pagination
+        all_posts_json = []
+        offset = 0
+        prev_batch_size = None
+
+        while True:
+            # Build archive API URL with pagination
+            archive_api_url = f"https://{handle}.substack.com/api/v1/archive?sort=new&offset={offset}"
+
+            try:
+                response = self._get(archive_api_url)
+                batch = json.loads(response.text)
+
+                # Check if we got any posts
+                if not batch or not isinstance(batch, list) or len(batch) == 0:
+                    break
+
+                # If we got the exact same batch size as last time OR a smaller batch, might be end
+                # But only stop if this batch is suspiciously small (< 10) or we got 0
+                current_batch_size = len(batch)
+
+                all_posts_json.extend(batch)
+
+                # Check if we should stop pagination
+                # If limit is set and we have enough posts, stop
+                if limit and len(all_posts_json) >= limit:
+                    break
+
+                # If after_date is set, check if oldest post in batch is before after_date
+                # This allows early termination when filtering by date
+                if after_dt and len(batch) > 0:
+                    last_post_date_str = batch[-1].get("post_date")
+                    if last_post_date_str:
+                        from dateutil import parser as date_parser
+                        try:
+                            last_post_date = date_parser.parse(last_post_date_str)
+                            if last_post_date < after_dt:
+                                # We've gone past the after_date, stop fetching
+                                break
+                        except Exception:
+                            pass
+
+                # Move to next batch
+                offset += len(batch)
+                prev_batch_size = current_batch_size
+
+            except Exception:
+                # If API call fails, stop pagination
+                break
+
+        # Parse the collected JSON data into PostSummary objects
+        return parsers.parse_archive_json(
+            handle=handle,
+            json_data=all_posts_json,
+            before_date=before_dt,
+            after_date=after_dt,
+            limit=limit,
+        )
+
     def crawl_publication(
         self,
         handle: str,

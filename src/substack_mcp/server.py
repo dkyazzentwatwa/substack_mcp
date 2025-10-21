@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Optional
+
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -359,6 +361,16 @@ def create_app(client: SubstackPublicClient | None = None) -> FastAPI:
     async def list_posts(handle: str, limit: int = Query(10, ge=1, le=50)) -> list[PostSummary]:
         return await run_in_threadpool(substack.fetch_feed, handle, limit)
 
+    @app.get("/publications/{handle}/archive", response_model=list[PostSummary])
+    async def list_archive(
+        handle: str,
+        before: Optional[str] = Query(None, description="ISO date string - posts before this date"),
+        after: Optional[str] = Query(None, description="ISO date string - posts after this date"),
+        limit: Optional[int] = Query(None, ge=1, description="Maximum number of posts"),
+    ) -> list[PostSummary]:
+        """Fetch all posts from publication archive with optional date filtering."""
+        return await run_in_threadpool(substack.fetch_archive, handle, before, after, limit)
+
     @app.get("/posts", response_model=PostContent)
     async def get_post(url: str = Query(..., description="Full URL to a Substack post")) -> PostContent:
         try:
@@ -462,6 +474,32 @@ def create_app(client: SubstackPublicClient | None = None) -> FastAPI:
                                             "limit": {
                                                 "type": "number",
                                                 "description": "Number of posts to retrieve (default: 10, max: 50)"
+                                            }
+                                        },
+                                        "required": ["handle"]
+                                    }
+                                },
+                                {
+                                    "name": "get_all_posts",
+                                    "description": "Get ALL posts from a publication's archive (not limited to recent 20). Supports date filtering to fetch posts from specific time periods.",
+                                    "inputSchema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "handle": {
+                                                "type": "string",
+                                                "description": "Substack publication handle (e.g. 'techtiff', 'stratechery', 'platformer')"
+                                            },
+                                            "before_date": {
+                                                "type": "string",
+                                                "description": "ISO date string (e.g. '2025-08-20') - only return posts published BEFORE this date"
+                                            },
+                                            "after_date": {
+                                                "type": "string",
+                                                "description": "ISO date string (e.g. '2025-01-01') - only return posts published AFTER this date"
+                                            },
+                                            "limit": {
+                                                "type": "number",
+                                                "description": "Maximum number of posts to return (no limit if not specified)"
                                             }
                                         },
                                         "required": ["handle"]
@@ -641,6 +679,65 @@ def create_app(client: SubstackPublicClient | None = None) -> FastAPI:
                                 "jsonrpc": "2.0",
                                 "id": body.get("id"),
                                 "error": {"code": -32603, "message": f"Error fetching posts: {str(e)}"}
+                            })
+
+                    # Get ALL posts from archive with date filtering
+                    elif tool_name == "get_all_posts":
+                        handle = arguments.get("handle", "")
+                        before_date = arguments.get("before_date")
+                        after_date = arguments.get("after_date")
+                        limit = arguments.get("limit")
+
+                        if not handle:
+                            return JSONResponse({
+                                "jsonrpc": "2.0",
+                                "id": body.get("id"),
+                                "error": {"code": -32602, "message": "Handle is required"}
+                            })
+
+                        try:
+                            posts = await run_in_threadpool(
+                                substack.fetch_archive,
+                                handle,
+                                before_date,
+                                after_date,
+                                limit
+                            )
+
+                            if posts:
+                                date_filter_info = ""
+                                if before_date or after_date:
+                                    filters = []
+                                    if after_date:
+                                        filters.append(f"after {after_date}")
+                                    if before_date:
+                                        filters.append(f"before {before_date}")
+                                    date_filter_info = f" ({', '.join(filters)})"
+
+                                result_text = f"📚 **All posts from {handle}{date_filter_info}:**\n\n"
+                                result_text += f"Retrieved: {len(posts)} posts\n\n"
+
+                                for i, post in enumerate(posts, 1):
+                                    excerpt = post.excerpt or "No preview available"
+                                    result_text += f"{i}. **{post.title}**\n"
+                                    result_text += f"   📅 {post.published_at.strftime('%Y-%m-%d') if post.published_at else 'Unknown'}\n"
+                                    result_text += f"   {excerpt[:150]}{'...' if len(excerpt) > 150 else ''}\n"
+                                    result_text += f"   🔗 {post.url}\n\n"
+                            else:
+                                result_text = f"❌ No posts found for publication '{handle}'"
+                                if before_date or after_date:
+                                    result_text += " with the specified date filters"
+
+                            return JSONResponse({
+                                "jsonrpc": "2.0",
+                                "id": body.get("id"),
+                                "result": {"content": [{"type": "text", "text": result_text}]}
+                            })
+                        except Exception as e:
+                            return JSONResponse({
+                                "jsonrpc": "2.0",
+                                "id": body.get("id"),
+                                "error": {"code": -32603, "message": f"Error fetching archive: {str(e)}"}
                             })
 
                     # Smart Substack search - handles natural language queries
