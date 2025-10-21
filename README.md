@@ -201,6 +201,22 @@ Parameters:
 - limit (optional): Number of posts (1-50, default: 10)
 ```
 
+#### `get_all_posts`
+Get ALL posts from a publication's archive (not limited to recent posts).
+```
+Parameters:
+- handle (required): Publication handle (e.g., 'platformer')
+- before_date (optional): ISO date string (e.g., '2025-08-20') - only posts before this date
+- after_date (optional): ISO date string (e.g., '2025-01-01') - only posts after this date
+- limit (optional): Maximum number of posts to return
+
+Features:
+- Uses pagination to fetch complete archive
+- Supports date range filtering
+- Early termination when date filters are satisfied
+- Cached with TTL for performance
+```
+
 #### `get_post_content`
 Get full content of a specific Substack post.
 ```
@@ -209,11 +225,72 @@ Parameters:
 ```
 
 #### `search`
-Search for content across publications.
+Basic search for content across publications.
 ```
 Parameters:
 - query (required): Search terms
 - handle (optional): Specific publication to search
+```
+
+#### `search_substack`
+Intelligently search for content with auto-discovery of relevant publications.
+```
+Parameters:
+- query (required): Natural language search query (topics, keywords, author names, or themes)
+  Examples: 'AI regulation', 'crypto DeFi', 'Ben Thompson tech analysis'
+- publication_hint (optional): Hint about publication to focus on
+
+Features:
+- Auto-discovers relevant publications based on query
+- Supports natural language queries
+- Smart content matching (phrase and multi-term matching)
+- Searches across multiple publications simultaneously
+- Returns top 8 most relevant results
+```
+
+#### `get_content`
+Smart content retrieval that works with URLs, publication names, or handles.
+```
+Parameters:
+- target (required): What to fetch - URL, publication name, or handle
+  Examples: 'https://stratechery.com/post', 'platformer', 'Ben Thompson latest'
+- analysis_type (optional): 'full' (content + analytics), 'summary' (recent posts), 'profile' (author info)
+
+Features:
+- Handles multiple input formats (URLs, names, handles)
+- Automatic publication hint resolution
+- Full analytics when requested
+- Flexible output based on analysis type
+```
+
+#### `discover_publications`
+Discover Substack publications by topic, industry, or theme.
+```
+Parameters:
+- topic (required): Topic or industry to explore
+  Examples: 'tech', 'finance', 'AI', 'crypto', 'politics', 'business strategy'
+
+Returns:
+- Curated list of publications for the topic
+- Publication descriptions
+- Latest posts from each publication
+- Direct links to publications
+```
+
+#### `analyze_trends`
+Analyze content trends, publishing patterns, and themes.
+```
+Parameters:
+- focus (required): Publication name, author, or topic to analyze
+  Examples: 'stratechery publishing patterns', 'AI content trends', 'Casey Newton'
+- analysis_depth (optional): 'quick' (recent), 'deep' (comprehensive), 'comparative' (multiple sources)
+
+Returns:
+- Publishing frequency and patterns
+- Common themes and topics
+- Recent posts overview
+- Keyword analysis
+- Cross-publication comparison (when applicable)
 ```
 
 ### 📊 **Analytics & Intelligence**
