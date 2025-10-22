@@ -179,8 +179,14 @@ Use the `/mcp` command anytime to:
 Output will show:
 ```
 Available MCP servers:
-- substack (7 tools available)
+- substack (13 tools available)
+  - search
   - get_posts
+  - get_all_posts
+  - search_substack
+  - get_content
+  - discover_publications
+  - analyze_trends
   - get_post_content
   - analyze_post
   - get_author_profile
@@ -410,6 +416,31 @@ Returns:
 "Search techtiff's notes for mentions of 'Claude'"
 "Find notes about AI automation from this author"
 "What topics is this writer covering in their notes?"
+```
+
+### Archive Research
+```
+"Get all posts from platformer published in 2024"
+"Show me techtiff's posts after January 1, 2025"
+"Fetch the complete archive from stratechery before August 2025"
+"Get all historical posts from this publication with no limit"
+```
+
+### Intelligent Search & Discovery
+```
+"Search for content about AI regulation"
+"Find posts discussing crypto DeFi across tech newsletters"
+"What's Ben Thompson writing about machine learning?"
+"Discover publications focused on AI and show me their latest content"
+"What tech publications cover remote work trends?"
+```
+
+### Advanced Analytics
+```
+"Analyze publishing patterns for stratechery"
+"Show me content trends about AI across multiple publications"
+"Compare writing frequency between platformer and techtiff"
+"What are the common themes in recent tech newsletter content?"
 ```
 
 ## Analytics Capabilities
