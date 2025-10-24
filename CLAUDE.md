@@ -40,13 +40,19 @@ This is a **Substack MCP (Model Context Protocol) Server** designed for use with
 The server implements the MCP protocol for Claude Desktop/Code integration:
 
 **MCP Tools Available:**
-- `get_posts` - Fetch recent posts from a publication
+- `search` - Basic search across publications
+- `get_posts` - Fetch recent posts from a publication (limited to ~20)
+- `get_all_posts` - **NEW**: Fetch ALL posts from publication archive with date filtering
+- `search_substack` - Intelligent search with auto-discovery of relevant publications
+- `get_content` - Smart content retrieval (URLs, publication names, handles)
+- `discover_publications` - Discover publications by topic/industry
+- `analyze_trends` - Analyze content trends and publishing patterns
 - `get_post_content` - Full content of specific posts
-- `get_notes` - Fetch recent notes from a publication
-- `get_author_profile` - Get author and publication information
 - `analyze_post` - Sentiment and readability analysis
+- `get_author_profile` - Get author and publication information
+- `get_notes` - Fetch recent notes from a publication
+- `search_notes` - Search notes by text content
 - `crawl_publication` - Comprehensive publication intelligence
-- `search` - Search within publications
 
 **Critical MCP Implementation Details:**
 - MCP SDK locked to version 1.10.0 due to CallToolResult serialization bug in later versions
@@ -107,7 +113,14 @@ SUBSTACK_MCP_WARM_PUBLICATION      # Publication to warm cache on startup
 - `SubstackPublicClient` - Main HTTP client
 - Rate limiting: 1 request per second
 - TTL cache: 15 minutes default
-- Methods: `fetch_feed()`, `fetch_post()`, `fetch_author_profile()`, `fetch_notes()`
+- Methods:
+  - `fetch_feed()` - Recent posts from RSS feed (limit: ~20)
+  - `fetch_archive()` - **NEW**: ALL posts from archive API with pagination and date filtering
+  - `fetch_post()` - Full post content from URL
+  - `fetch_author_profile()` - Author and publication metadata
+  - `fetch_notes()` - Recent notes from publication
+  - `search_notes()` - Search notes by text content
+  - `crawl_publication()` - Comprehensive publication crawl
 
 ### Models (`models.py`)
 All Pydantic v2 models with proper validation:
@@ -136,6 +149,14 @@ All Pydantic v2 models with proper validation:
 - Uses `create_text_result()` helper for MCP responses
 - Error handling with proper MCP error types
 - Stdio transport for Claude Desktop integration
+
+**Intelligent Tool Features:**
+- `resolve_publication_hint()` - Maps natural language hints to publication handles
+- `auto_discover_publications()` - Auto-discovers relevant publications based on query content
+- `smart_content_match()` - Intelligent content matching beyond simple string search (phrase matching, multi-term matching)
+- `smart_content_retrieval()` - Handles URLs, publication names, and handles with automatic resolution
+- `discover_publications_by_topic()` - Curated publication recommendations by topic
+- `analyze_content_trends()` - Publishing patterns, themes, and cross-publication analysis
 
 ## Development Workflow
 
@@ -189,6 +210,13 @@ pytest tests/test_server.py -v
 - Verify stdio transport is working (not HTTP)
 - Ensure `create_text_result()` returns plain dicts
 - Test with Claude Desktop integration
+
+### Fetch Complete Archives
+- Use `fetch_archive()` instead of `fetch_feed()` to get all posts
+- Supports date range filtering with `before_date` and `after_date` (ISO format)
+- Uses pagination automatically to fetch complete archive
+- Early termination when date filters are satisfied (optimized performance)
+- Example: `client.fetch_archive("platformer", after_date="2025-01-01", before_date="2025-08-20")`
 
 ## Dependencies
 
